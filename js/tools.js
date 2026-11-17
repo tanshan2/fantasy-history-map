@@ -4,9 +4,16 @@
   const T = (App.Tools = {
     cur: 'select', activeNation: 0, activeProv: 0, sel: null, mouse: null,
     opt: { brush: 5, land: 'land', terrain: 5, forest: 1, fill: false, erase: false, cityType: 'medium', armyType: 'infantry', strength: '1万',
-      lineStyle: 'border', provLevel: 1, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
+      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
   });
-  const BRUSH = ['land', 'terrain', 'forest', 'nation', 'prov'];
+  const BRUSH = ['color', 'land', 'terrain', 'forest', 'nation', 'prov'];
+  // 彩色画笔：同一种颜色 = 同一块势力（没有就自动建一个未命名的）
+  T.colorNation = () => {
+    const col = (T.opt.color || '#c8584a').toLowerCase();
+    let n = App.S.nations.find((k) => k.color.toLowerCase() === col);
+    if (!n) n = App.Ops.addNation({ name: '', color: col, culture: (App.UI && App.UI.newCulture) || 'huaxia' });
+    return n.id;
+  };
   const DRAWLINE = ['river', 'line', 'arrow'];
   let canvas, drag = null, spaceDown = false, pointers = new Map(), pinch = null;
 
@@ -83,9 +90,16 @@
     const x0 = Math.max(0, Math.floor(cx - r)), x1 = Math.min(W - 1, Math.ceil(cx + r)), y0 = Math.max(0, Math.floor(cy - r)), y1 = Math.min(H - 1, Math.ceil(cy + r));
     const tool = T.cur, nid = T.activeNation, prov = App.province(T.activeProv);
     let ch = false;
+    let landCh = false; const cnid = tool === 'color' && !o.erase ? T.colorNation() : 0;
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 > r * r) continue;
       const c = y * W + x, t = S.terrain[c];
+      if (tool === 'color') {
+        if (o.erase) { if (S.owner[c]) { S.owner[c] = 0; App.Ops.clearAllProv(c); ch = true; } continue; }
+        if (t < 2) { if (!o.makeLand) continue; S.terrain[c] = 2; landCh = true; }
+        if (S.owner[c] !== cnid) { S.owner[c] = cnid; App.Ops.clearAllProv(c); ch = true; }
+        continue;
+      }
       if (tool === 'land') {
         if (o.land === 'land') { if (t < 2) { S.terrain[c] = 2; ch = true; } }
         else { const nt = o.land === 'lake' ? 1 : 0; if (t !== nt) { S.terrain[c] = nt; S.forest[c] = 0; S.owner[c] = 0; App.Ops.clearAllProv(c); ch = true; } }
@@ -101,13 +115,14 @@
         else if (prov && S.owner[c] === prov.nation && A[c] !== prov.id) { App.Ops.setProvCell(c, prov); ch = true; }
       }
     }
-    if (ch) App.changed(tool === 'land' ? { land: true, pol: true } : tool === 'terrain' || tool === 'forest' ? { tint: true } : { pol: true });
+    if (landCh) App.changed({ land: true, pol: true });
+    else if (ch) App.changed(tool === 'land' ? { land: true, pol: true } : tool === 'terrain' || tool === 'forest' ? { tint: true } : { pol: true });
   };
   const fill = (wx, wy) => {
     const S = App.S, c0 = App.Ops.cellAt(wx, wy); if (c0 < 0 || S.terrain[c0] < 2) return;
     const nid = T.activeNation, prov = App.province(T.activeProv);
-    if (T.cur === 'nation') {
-      const o0 = S.owner[c0], target = T.opt.erase ? 0 : nid; if (o0 === target || (!target && !T.opt.erase)) return;
+    if (T.cur === 'nation' || T.cur === 'color') {
+      const o0 = S.owner[c0], target = T.opt.erase ? 0 : T.cur === 'color' ? T.colorNation() : nid; if (o0 === target || (!target && !T.opt.erase)) return;
       App.pushUndo(["owner", "prov", "prov2", "prov3"]);
       App.Ops.flood(c0, (n) => S.terrain[n] >= 2 && S.owner[n] === o0).forEach((c) => { S.owner[c] = target; App.Ops.clearAllProv(c); });
     } else if (T.cur === 'prov') {
@@ -155,10 +170,10 @@
       return;
     }
     if (BRUSH.includes(T.cur)) {
-      if ((T.cur === 'nation' || T.cur === 'prov') && T.opt.fill) { fill(wx, wy); return; }
+      if ((T.cur === 'nation' || T.cur === 'prov' || T.cur === 'color') && T.opt.fill) { fill(wx, wy); App.UI.refresh(); return; }
       if (T.cur === 'nation' && !T.activeNation && !T.opt.erase) { App.UI.toast('请先在右侧「国家」面板选择或新建一个国家'); return; }
       if (T.cur === 'prov' && !T.activeProv && !T.opt.erase) { App.UI.toast('请先在右侧「行政区」面板选择或新建一个行政区'); return; }
-      App.pushUndo(T.cur === "land" ? ["terrain", "forest", "owner", "prov", "prov2", "prov3"] : T.cur === "terrain" ? ["terrain"] : T.cur === "forest" ? ["forest"] : ["owner", "prov", "prov2", "prov3"]);
+      App.pushUndo(T.cur === "land" || T.cur === "color" ? ["terrain", "forest", "owner", "prov", "prov2", "prov3"] : T.cur === "terrain" ? ["terrain"] : T.cur === "forest" ? ["forest"] : ["owner", "prov", "prov2", "prov3"]);
       drag = { type: 'brush', wx, wy }; paint(wx, wy); return;
     }
     if (DRAWLINE.includes(T.cur)) {
@@ -205,7 +220,7 @@
     canvas.style.cursor = '';
     if (!drag) return;
     const d = drag; drag = null;
-    if (d.type === 'brush') { App.Geo.dirtyPol = true; App.R.request(); App.UI.refresh(); }
+    if (d.type === 'brush') { App.Geo.dirtyPol = true; App.R.request(); App.UI.refresh(); if (T.cur === 'color') App.UI.refreshTool(); }
     if (d.type === 'move' && d.pushed) { App.changed({}); App.UI.showSelection(); }
     if (d.type === 'line') {
       const pts = U.simplify(d.pts, 1.2 / App.R.view.s).map((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]);
@@ -243,14 +258,14 @@
     if (e.key === 'Escape') { drag = null; T.set('select'); return; }
     if (e.key === '[') { T.opt.brush = Math.max(0.5, T.opt.brush - 1); App.UI.refreshTool(); App.R.request(); return; }
     if (e.key === ']') { T.opt.brush = Math.min(40, T.opt.brush + 1); App.UI.refreshTool(); App.R.request(); return; }
-    const map = { v: 'select', h: 'pan', l: 'land', t: 'terrain', f: 'forest', r: 'river', n: 'nation', p: 'prov', b: 'line', c: 'city', a: 'army', w: 'arrow', m: 'marker', x: 'text' };
+    const map = { g: 'color', v: 'select', h: 'pan', l: 'land', t: 'terrain', f: 'forest', r: 'river', n: 'nation', p: 'prov', b: 'line', c: 'city', a: 'army', w: 'arrow', m: 'marker', x: 'text' };
     if (map[e.key.toLowerCase()]) T.set(map[e.key.toLowerCase()]);
   };
 
   // ---------- 覆盖层（光标、预览、选中） ----------
   T.drawOverlay = (c, s) => {
     const m = T.mouse;
-    if (m && BRUSH.includes(T.cur) && !((T.cur === 'nation' || T.cur === 'prov') && T.opt.fill)) {
+    if (m && BRUSH.includes(T.cur) && !((T.cur === 'nation' || T.cur === 'prov' || T.cur === 'color') && T.opt.fill)) {
       c.beginPath(); c.arc(m[0], m[1], T.opt.brush * C, 0, Math.PI * 2);
       c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.5 / s; c.stroke();
       c.strokeStyle = 'rgba(0,0,0,.6)'; c.lineWidth = 0.75 / s; c.stroke();
