@@ -7,9 +7,9 @@ App.newState = () => ({
   owner: new Uint16Array(App.N), prov: new Uint16Array(App.N), prov2: new Uint16Array(App.N), prov3: new Uint16Array(App.N),
   nations: [], provinces: [], cities: [], armies: [], rivers: [], lines: [], arrows: [], markers: [], texts: [], families: [], people: [],
   meta: {
-    name: '未命名地图', labelFont: 'Noto Serif SC', latinFont: 'Alegreya', style: 'vivid', cityStyle: 'icon', year: 1, lv1: true, lv2: true, lv3: false,
+    name: '未命名地图', labelFont: 'Noto Serif SC', latinFont: 'IM Fell English', style: 'parchment', styleV: 2, cityStyle: 'icon', year: 1, lv1: true, lv2: true, lv3: false,
     showIcons: true, showGrid: true, showProvLabels: true, showCityLabels: true, showArmies: true,
-    ocean: '#3a86e0', ref: null,
+    ocean: '#304a66', ref: null,
   },
   nextId: 1,
 });
@@ -68,7 +68,7 @@ App.serialize = (withRef = true) => {
 App.deserialize = (o) => {
   if (!o || o.format !== 'fantasy-history-map') throw new Error('不是本工具的地图文件');
   const s = App.newState();
-  s.nextId = o.nextId; Object.assign(s.meta, o.meta || {}); if (!(o.meta || {}).style) { s.meta.ocean = "#3a86e0"; s.meta.latinFont = "Alegreya"; }
+  s.nextId = o.nextId; Object.assign(s.meta, o.meta || {}); if (!(o.meta || {}).styleV) { s.meta.style = 'parchment'; s.meta.styleV = 2; s.meta.ocean = '#304a66'; s.meta.latinFont = 'IM Fell English'; }
   App.OBJ_KEYS.forEach((k) => (s[k] = o[k] || []));
   s.terrain = unrle(o.terrain, Uint8Array); s.forest = unrle(o.forest, Uint8Array);
   s.owner = unrle(o.owner, Uint16Array); s.prov = unrle(o.prov, Uint16Array);
@@ -93,7 +93,7 @@ let saveTimer = 0;
 App.autosave = () => {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { App.DB.set('autosave', JSON.stringify(App.serialize(true))).then(() => App.UI && App.UI.flash('已自动保存')); } catch (e) { console.warn(e); }
+    try { App.DB.set('autosave2', JSON.stringify(App.serialize(true))).then(() => App.UI && App.UI.flash('已自动保存')); } catch (e) { console.warn(e); }
   }, 1500);
 };
 
