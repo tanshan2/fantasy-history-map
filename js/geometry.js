@@ -205,15 +205,31 @@
       const score = dist[c] - 0.02 * Math.hypot(x - cx, y - cy);
       if (score > s.bd) { s.bd = score; s.best = c; }
     }
+    // 备选位置：区域内其他“宽处”，用于标签避让
+    const pool = new Map();
+    for (let c = 0; c < N; c++) {
+      const id = A[c]; if (!id) continue;
+      const s = st.get(id), bd = dist[s.best];
+      if (dist[c] >= Math.max(2, bd * 0.5) && (U.hash(c, 7, 91) < 0.25 || dist[c] >= bd * 0.85)) { let p = pool.get(id); if (!p) pool.set(id, (p = [])); p.push(c); }
+    }
     const out = new Map();
     st.forEach((s, id) => {
+      const p = (pool.get(id) || []).sort((a, b) => dist[b] - dist[a]), bd = dist[s.best], picks = [];
+      for (const c of p) {
+        if (picks.length >= 6) break;
+        const x = c % W, y = (c / W) | 0;
+        if (c === s.best || picks.some((q) => Math.hypot(q % W - x, ((q / W) | 0) - y) < bd * 1.4)) continue;
+        if (Math.hypot(s.best % W - x, ((s.best / W) | 0) - y) < bd * 1.4) continue;
+        picks.push(c);
+      }
+      s.alts = picks.map((c) => ({ x: ((c % W) + 0.5) * C, y: (((c / W) | 0) + 0.5) * C, r: dist[c] * C }));
       const cx = s.sx / s.n, cy = s.sy / s.n, vxx = s.sxx / s.n - cx * cx, vyy = s.syy / s.n - cy * cy, vxy = s.sxy / s.n - cx * cy;
       const tr = vxx + vyy, det = vxx * vyy - vxy * vxy, disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
       const l1 = tr / 2 + disc, l2 = Math.max(0.01, tr / 2 - disc);
       let ang = Math.abs(vxy) < 1e-6 ? (vxx >= vyy ? 0 : Math.PI / 2) : Math.atan2(l1 - vxx, vxy);
       if (ang > Math.PI / 2) ang -= Math.PI; if (ang < -Math.PI / 2) ang += Math.PI;
       const b = s.best, r = dist[b];
-      out.set(id, { n: s.n, x: ((b % W) + 0.5) * C, y: (((b / W) | 0) + 0.5) * C, ang, r: r * C, L: Math.min(4 * Math.sqrt(l1), r * 5) * C, M: 4 * Math.sqrt(l2) * C });
+      out.set(id, { n: s.n, x: ((b % W) + 0.5) * C, y: (((b / W) | 0) + 0.5) * C, ang, r: r * C, L: Math.min(4 * Math.sqrt(l1), r * 5) * C, M: 4 * Math.sqrt(l2) * C, alts: s.alts });
     });
     return out;
   };
