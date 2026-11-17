@@ -125,6 +125,7 @@
       const o0 = S.owner[c0], target = T.opt.erase ? 0 : T.cur === 'color' ? T.colorNation() : nid; if (o0 === target || (!target && !T.opt.erase)) return;
       App.pushUndo(["owner", "prov", "prov2", "prov3"]);
       App.Ops.flood(c0, (n) => S.terrain[n] >= 2 && S.owner[n] === o0).forEach((c) => { S.owner[c] = target; App.Ops.clearAllProv(c); });
+      if (target) App.Ops.fillUnassigned();
     } else if (T.cur === 'prov') {
       const lv = T.opt.erase ? T.opt.provLevel || 1 : prov ? prov.level || 1 : 1, A = App.provArr(lv), o0 = S.owner[c0], p0 = A[c0];
       if (!T.opt.erase && !(prov && prov.nation === o0)) return; if (!T.opt.erase && p0 === prov.id) return;
@@ -220,7 +221,7 @@
     canvas.style.cursor = '';
     if (!drag) return;
     const d = drag; drag = null;
-    if (d.type === 'brush') { App.Geo.dirtyPol = true; App.R.request(); App.UI.refresh(); if (T.cur === 'color') App.UI.refreshTool(); }
+    if (d.type === 'brush') { if ((T.cur === 'color' || T.cur === 'nation') && !T.opt.erase) App.Ops.fillUnassigned(); App.Geo.dirtyPol = true; App.R.request(); App.UI.refresh(); if (T.cur === 'color') App.UI.refreshTool(); }
     if (d.type === 'move' && d.pushed) { App.changed({}); App.UI.showSelection(); }
     if (d.type === 'line') {
       const pts = U.simplify(d.pts, 1.2 / App.R.view.s).map((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]);
