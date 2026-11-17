@@ -79,6 +79,7 @@
     c.globalAlpha = st.tintA; c.drawImage(G.tintCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
     S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.fillStyle = U.rgba(n.color, st.nationA); c.fill(p, 'evenodd'); });
     c.globalAlpha = st.band; c.drawImage(G.bandCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
+    if (S.meta.showClimate) { c.globalAlpha = 0.62; c.drawImage(App.Climate.canvas, 0, 0, WW, HH); c.globalAlpha = 1; }
     c.globalAlpha = st.paper; c.globalCompositeOperation = 'multiply'; c.fillStyle = pats.paper; c.fillRect(0, 0, WW, HH); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1;
     if (st.aged) { c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(222,200,158)'; c.fillRect(0, 0, WW, HH); c.globalCompositeOperation = 'source-over'; }
     // 行政区界（三级，从细到粗）
