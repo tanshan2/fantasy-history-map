@@ -1,10 +1,10 @@
 // ===== 地图数据、撤销、存档 =====
 App.OBJ_KEYS = ['nations', 'provinces', 'cities', 'armies', 'rivers', 'lines', 'arrows', 'markers', 'texts', 'families', 'people'];
-App.ARR_KEYS = ['terrain', 'forest', 'owner', 'prov', 'prov2', 'prov3'];
+App.ARR_KEYS = ['terrain', 'forest', 'owner', 'prov', 'prov2', 'prov3', 'climate'];
 
 App.newState = () => ({
   terrain: new Uint8Array(App.N), forest: new Uint8Array(App.N),
-  owner: new Uint16Array(App.N), prov: new Uint16Array(App.N), prov2: new Uint16Array(App.N), prov3: new Uint16Array(App.N),
+  owner: new Uint16Array(App.N), prov: new Uint16Array(App.N), prov2: new Uint16Array(App.N), prov3: new Uint16Array(App.N), climate: new Uint8Array(App.N),
   nations: [], provinces: [], cities: [], armies: [], rivers: [], lines: [], arrows: [], markers: [], texts: [], families: [], people: [],
   meta: {
     name: '未命名地图', labelFont: 'Noto Serif SC', latinFont: 'IM Fell English', style: 'parchment', styleV: 2, cityStyle: 'icon', year: 1, lv1: true, lv2: true, lv3: false,
@@ -72,7 +72,7 @@ App.deserialize = (o) => {
   App.OBJ_KEYS.forEach((k) => (s[k] = o[k] || []));
   s.terrain = unrle(o.terrain, Uint8Array); s.forest = unrle(o.forest, Uint8Array);
   s.owner = unrle(o.owner, Uint16Array); s.prov = unrle(o.prov, Uint16Array);
-  if (o.prov2) s.prov2 = unrle(o.prov2, Uint16Array); if (o.prov3) s.prov3 = unrle(o.prov3, Uint16Array);
+  if (o.prov2) s.prov2 = unrle(o.prov2, Uint16Array); if (o.climate) s.climate = unrle(o.climate, Uint8Array); if (o.prov3) s.prov3 = unrle(o.prov3, Uint16Array);
   s.provinces.forEach((p) => (p.level = p.level || 1));
   App.S = s; App.undoStack.length = 0; App.redoStack.length = 0;
 };
