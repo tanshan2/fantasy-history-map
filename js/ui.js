@@ -50,6 +50,7 @@
       rd.readAsDataURL(f); e.target.value = '';
     };
     $('#mapName').addEventListener('change', (e) => { App.S.meta.name = e.target.value; App.autosave(); });
+    $('#btnFamily').onclick = () => App.Family.show();
     UI.refreshTool(); UI.refresh();
   };
 
@@ -87,10 +88,10 @@
       case 'forest': h = chips('forest', App.FORESTS) + brush(); break;
       case 'river': h = `<label class="rng">河宽 <input type="range" min="0.6" max="6" step="0.2" value="${o.riverWidth}" data-num="riverWidth"><b>${o.riverWidth}</b></label><span class="hint">从源头画向入海口（越画越宽）</span>`; break;
       case 'nation': h = nationPick() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
-      case 'prov': h = `<label>行政区 <select data-act="activeProv"><option value="0">— 选择 —</option>${App.S.provinces.filter((p) => p.nation === T().activeNation).map((p) => `<option value="${p.id}" ${p.id === T().activeProv ? 'selected' : ''}>${U.esc(p.name)}</option>`).join('')}</select></label>` + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
+      case "prov": h = nationPick() + `<label>行政区 <select data-act="activeProv"><option value="0">— 选择 —</option>${UI.provOptions()}</select></label>` + (o.erase ? chips("provLevel", [{ id: 1, name: "擦省" }, { id: 2, name: "擦道" }, { id: 3, name: "擦府" }]) : "") + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
       case 'line': h = chips('lineStyle', App.LINE_STYLES) + '<span class="hint">按住拖动绘制</span>'; break;
       case 'city': h = chips('cityType', App.CITY_TYPES) + '<span class="hint">点击放置，名字按所在国文明自动生成</span>'; break;
-      case 'army': h = nationPick() + chips('armyType', App.ARMY_TYPES) + `<label>兵力 <input type="text" size="5" value="${U.esc(o.strength)}" data-str="strength"></label>`; break;
+      case "army": h = nationPick() + ["步兵", "骑兵", "其他"].map((g) => `<span class="grp">${g}</span>` + chips("armyType", App.ARMY_TYPES.filter((a) => a.g === g))).join("") + `<label>兵力 <input type="text" size="5" value="${U.esc(o.strength)}" data-str="strength"></label>`; break;
       case 'arrow': h = nationPick() + `<label class="rng">宽度 <input type="range" min="4" max="40" step="1" value="${o.arrowWidth}" data-num="arrowWidth"><b>${o.arrowWidth}</b></label>`; break;
       case 'marker': h = chips('markerType', App.MARKER_TYPES); break;
       case 'text': h = `<label class="rng">字号 <input type="range" min="8" max="120" step="1" value="${o.textSize}" data-num="textSize"><b>${o.textSize}</b></label><span class="hint">点击地图放置文字（海名、地区名、标题框…）</span>`; break;
@@ -109,6 +110,7 @@
 
   // ---------- 右侧面板 ----------
   UI.refresh = () => {
+    if (UI.syncLv) UI.syncLv();
     document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === UI.tab));
     $('#mapName').value = App.S.meta.name || '';
     const p = $('#tabBody');
@@ -128,41 +130,53 @@
     h += '<ul class="list">' + S.nations.map((n) => `<li class="${n.id === T().activeNation ? 'on' : ''}" data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name)}</span><small>${App.CULTURES.find((c) => c.id === n.culture)?.name || ''} · ${counts.get(n.id) || 0}格</small></li>`).join('') + '</ul>';
     if (!S.nations.length) h += '<p class="muted">还没有国家。新建一个，然后用左侧「国家」工具在地图上涂色。</p>';
     if (an) {
-      const g = App.R.nationLabelGeom(an);
       h += `<div class="card"><h4>编辑：${U.esc(an.name)}</h4>
         ${field('国名', `<div class="row"><input type="text" data-n="name" value="${U.esc(an.name)}"><button class="btn" data-act="rndName" title="按文明随机">🎲</button></div>`)}
         ${field('颜色', `<input type="color" data-n="color" value="${an.color}">`)}
         ${field('文明', cultureSel(an.culture, 'nCulture'))}
-        ${field('国名字号', `<input type="range" min="6" max="160" value="${Math.round(g?.size || 30)}" data-lbl="size">`)}
-        ${field('国名角度', `<input type="range" min="-90" max="90" value="${Math.round(((g?.ang || 0) * 180) / Math.PI)}" data-lbl="angle">`)}
-        <div class="row wrap"><button class="btn" data-act="lblAuto">国名位置自动</button><button class="btn" data-act="rndAll">🎲 全部重命名（国/省/城）</button></div>
-        <div class="row wrap"><label class="inline">分成 <input type="number" min="1" max="40" value="${UI.provK || 5}" data-act="provK" style="width:52px"> 个行政区</label><button class="btn" data-act="autoProv">自动划分</button></div>
+        <p class="muted">国名自动显示在领土最宽处，不能拖动。</p>
+        <div class="row wrap"><button class="btn" data-act="rndAll">🎲 全部重命名（国/省/道/府/城）</button></div>
+        <h4 style="margin-top:10px">自动划分三级行政区</h4>
+        <div class="row wrap"><label class="inline">分成 <input type="number" min="1" max="40" value="${UI.provK || 5}" data-act="provK" style="width:52px"> 个省，道/府按面积自动细分</label></div>
+        <div class="row wrap"><button class="btn" data-act="autoProv">重新划分全部</button><button class="btn" data-act="autoSub">保留省，只细分道/府</button></div>
         <div class="row wrap"><button class="btn" data-act="autoCity">自动生成城市</button><button class="btn danger" data-act="delNation">删除国家</button></div></div>`;
     }
-    h += `<div class="row wrap"><button class="btn" data-act="recolor">相邻国家自动配色</button></div>`;
+    h += `<div class="row wrap"><button class="btn" data-act="recolor">相邻国家自动配色</button><button class="btn" data-act="family">家族 / 族谱…</button></div>`;
     return h;
   };
   UI.tab_provs = () => {
     const S = App.S, an = App.nation(T().activeNation);
     if (!an) return '<p class="muted">先在「国家」页选择一个国家。</p>' + `<ul class="list">${S.nations.map((n) => `<li data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name)}</span></li>`).join('')}</ul>`;
     const ps = S.provinces.filter((p) => p.nation === an.id);
-    let h = `<div class="row"><b style="color:${an.color}">■</b>&nbsp;${U.esc(an.name)} 的行政区</div><div class="row"><button class="btn pri" data-act="addProv">＋ 新建行政区</button></div>`;
-    h += '<ul class="list">' + ps.map((p) => `<li class="${p.id === T().activeProv ? 'on' : ''}" data-prov="${p.id}"><span>${U.esc(p.name)}</span></li>`).join('') + '</ul>';
-    if (!ps.length) h += '<p class="muted">新建行政区后，选「行政区」工具在本国领土内涂抹；也可以回到国家页一键自动划分。</p>';
+    const kids = (pid, lv) => ps.filter((p) => (p.level || 1) === lv && (lv === 1 || p.parent === pid));
+    const row = (p) => {
+      const lv = p.level || 1, open = UI.provOpen?.[p.id];
+      const sub = lv < 3 ? kids(p.id, lv + 1) : [];
+      return `<li class="lv${lv} ${p.id === T().activeProv ? 'on' : ''}" data-prov="${p.id}"><em data-ptog="${p.id}">${sub.length ? (open ? '▾' : '▸') : '·'}</em><span>${U.esc(p.name)}</span><small>${App.LEVELS[lv].name}${sub.length ? ' · ' + sub.length : ''}</small></li>` + (open ? sub.map(row).join('') : '');
+    };
+    let h = `<div class="row"><b style="color:${an.color}">■</b>&nbsp;${U.esc(an.name)} 的行政区</div>
+      <div class="row wrap"><button class="btn pri" data-act="addProv">＋ 新建省</button></div>`;
+    h += '<ul class="list ptree">' + kids(0, 1).map(row).join('') + '</ul>';
+    if (!ps.length) h += '<p class="muted">新建省后，可在省下面建道、在道下面建府；选中后用左侧「行政区」工具在本国领土内涂抹。也可以回到「国家」页一键自动划分。</p>';
     const ap = App.province(T().activeProv);
     if (ap && ap.nation === an.id) {
-      h += `<div class="card"><h4>编辑行政区</h4>${field('名称', `<div class="row"><input type="text" data-p="name" value="${U.esc(ap.name)}"><button class="btn" data-act="rndProv">🎲</button></div>`)}
-      <div class="row wrap"><button class="btn" data-act="provLblAuto">名称位置自动</button><button class="btn danger" data-act="delProv">删除行政区</button></div></div>`;
+      const lv = ap.level || 1, par = App.province(ap.parent);
+      h += `<div class="card"><h4>编辑${App.LEVELS[lv].full}</h4>${par ? `<p class="muted">隶属：${U.esc(par.name)}</p>` : ''}
+      ${field('名称', `<div class="row"><input type="text" data-p="name" value="${U.esc(ap.name)}"><button class="btn" data-act="rndProv">🎲</button></div>`)}
+      <div class="row wrap">${lv < 3 ? `<button class="btn pri" data-act="addSub">＋ 下设${App.LEVELS[lv + 1].name}</button>` : ''}<button class="btn danger" data-act="delProv">删除（含下级）</button></div></div>`;
     }
     return h;
   };
   UI.tab_layers = () => {
     const m = App.S.meta, ref = m.ref;
     const ck = (k, n) => `<label class="ck"><input type="checkbox" data-meta="${k}" ${m[k] ? 'checked' : ''}> ${n}</label>`;
-    const fonts = ['Noto Serif SC', 'Ma Shan Zheng', 'ZCOOL XiaoWei', 'Long Cang', 'LXGW WenKai TC', 'Noto Sans SC'];
-    const lfonts = ['IM Fell English', 'Cinzel', 'Almendra', 'EB Garamond', 'MedievalSharp'];
-    let h = `<div class="card"><h4>显示</h4>${ck('showIcons', '山脉/森林图标')}${ck('showGrid', '经纬网格')}${ck('showProvLabels', '行政区名')}${ck('showCityLabels', '城市名')}${ck('showArmies', '军队与箭头')}</div>
-    <div class="card"><h4>风格</h4>${field('中文字体', `<select data-meta-s="labelFont">${fonts.map((f) => `<option ${f === m.labelFont ? 'selected' : ''}>${f}</option>`).join('')}</select>`)}
+    const fonts = ['Noto Serif SC', 'Ma Shan Zheng', 'ZCOOL XiaoWei', 'Long Cang', 'Noto Sans SC'];
+    const lfonts = ['Alegreya', 'IM Fell English', 'Cinzel', 'Almendra', 'EB Garamond', 'MedievalSharp'];
+    let h = `<div class="card"><h4>画风</h4><div class="chips">${Object.entries(App.R.STYLES).map(([id, s]) => `<button class="chip ${m.style === id ? 'on' : ''}" data-style="${id}">${s.name}</button>`).join('')}</div>
+      ${field('城市样式', `<div class="chips"><button class="chip ${m.cityStyle === 'icon' ? 'on' : ''}" data-city="icon">插画图标</button><button class="chip ${m.cityStyle !== 'icon' ? 'on' : ''}" data-city="dot">简洁圆点</button></div>`)}</div>
+    <div class="card"><h4>行政区显示</h4>${ck('lv1', '省（一级）')}${ck('lv2', '道（二级）')}${ck('lv3', '府（三级）')}<br>${ck('showProvLabels', '显示行政区名')}</div>
+    <div class="card"><h4>显示</h4>${ck('showIcons', '山脉/森林图标')}${ck('showGrid', '网格')}${ck('showCityLabels', '城市名')}${ck('showArmies', '军队与箭头')}${ck('showFamilies', '家族旗帜')}</div>
+    <div class="card"><h4>字体与颜色</h4>${field('中文字体', `<select data-meta-s="labelFont">${fonts.map((f) => `<option ${f === m.labelFont ? 'selected' : ''}>${f}</option>`).join('')}</select>`)}
     ${field('西文字体', `<select data-meta-s="latinFont">${lfonts.map((f) => `<option ${f === m.latinFont ? 'selected' : ''}>${f}</option>`).join('')}</select>`)}
     ${field('海洋颜色', `<input type="color" data-meta-s="ocean" value="${m.ocean}">`)}</div>
     <div class="card"><h4>参考图（描图用）</h4><p class="muted">导入你自己的地图截图，半透明叠在上面照着画。</p><div class="row"><button class="btn" data-act="loadRef">导入图片</button>${ref ? '<button class="btn danger" data-act="delRef">移除</button>' : ''}</div>`;
@@ -183,7 +197,10 @@
   const bind = (p) => {
     const S = App.S;
     p.querySelectorAll('[data-nation]').forEach((li) => (li.onclick = () => { T().activeNation = +li.dataset.nation; T().activeProv = 0; UI.refresh(); UI.refreshTool(); }));
-    p.querySelectorAll('[data-prov]').forEach((li) => (li.onclick = () => { T().activeProv = +li.dataset.prov; if (T().cur !== 'prov') T().set('prov'); UI.refresh(); UI.refreshTool(); }));
+    p.querySelectorAll("[data-ptog]").forEach((e) => (e.onclick = (ev) => { ev.stopPropagation(); UI.provOpen = UI.provOpen || {}; UI.provOpen[e.dataset.ptog] = !UI.provOpen[e.dataset.ptog]; UI.refresh(); }));
+    p.querySelectorAll("[data-prov]").forEach((li) => (li.onclick = () => { T().activeProv = +li.dataset.prov; if (T().cur !== "prov") T().set("prov"); UI.refresh(); UI.refreshTool(); }));
+    p.querySelectorAll("[data-style]").forEach((b) => (b.onclick = () => { const st = App.R.STYLES[b.dataset.style]; S.meta.style = b.dataset.style; S.meta.ocean = st.ocean; App.R.request(); App.autosave(); UI.refresh(); }));
+    p.querySelectorAll("[data-city]").forEach((b) => (b.onclick = () => { S.meta.cityStyle = b.dataset.city; App.R.request(); App.autosave(); UI.refresh(); }));
     const an = App.nation(T().activeNation), ap = App.province(T().activeProv);
     p.querySelectorAll('[data-n]').forEach((i) => {
       i.onfocus = () => App.pushUndo();
@@ -191,12 +208,7 @@
       i.onchange = () => { App.changed({ ui: true }); UI.refreshTool(); };
     });
     p.querySelectorAll('[data-p]').forEach((i) => { i.onfocus = () => App.pushUndo(); i.oninput = () => { ap[i.dataset.p] = i.value; App.R.request(); }; i.onchange = () => App.changed({ ui: true }); });
-    p.querySelectorAll('[data-lbl]').forEach((i) => (i.oninput = () => {
-      const g = App.R.nationLabelGeom(an); an.label = { x: g.x, y: g.y, angle: g.ang, size: g.size, ...(an.label || {}) };
-      if (i.dataset.lbl === 'size') an.label.size = +i.value; else an.label.angle = (+i.value * Math.PI) / 180;
-      App.R.request(); App.autosave();
-    }));
-    p.querySelectorAll('[data-meta]').forEach((i) => (i.onchange = () => { S.meta[i.dataset.meta] = i.checked; App.R.request(); App.autosave(); }));
+    p.querySelectorAll("[data-meta]").forEach((i) => (i.onchange = () => { S.meta[i.dataset.meta] = i.checked; App.R.request(); App.autosave(); UI.syncLv(); }));
     p.querySelectorAll('[data-meta-s]').forEach((i) => (i.oninput = () => { S.meta[i.dataset.metaS] = i.value; loadFont(i.value); App.R.request(); App.autosave(); }));
     p.querySelectorAll('[data-ref]').forEach((i) => (i.oninput = () => {
       const r = S.meta.ref, k = i.dataset.ref, v = +i.value;
@@ -209,17 +221,18 @@
     act('addNation', () => { App.pushUndo(); const n = App.Ops.addNation({ culture: UI.newCulture || 'huaxia' }); T().activeNation = n.id; T().activeProv = 0; if (!['nation', 'army', 'arrow'].includes(T().cur)) T().set('nation'); App.changed({ ui: true }); UI.refreshTool(); });
     act('rndName', () => { App.pushUndo(); an.name = App.Names.nation(an.culture); App.changed({ ui: true }); UI.refreshTool(); });
     act('nCulture', (b) => { App.pushUndo(); an.culture = b.value; App.changed({ ui: true }); });
-    act('lblAuto', () => { App.pushUndo(); an.label = null; App.changed({ ui: true }); });
     act('rndAll', () => { App.pushUndo(); App.Ops.renameAll(an.id); App.changed({ ui: true }); UI.refreshTool(); });
     act('provK', (b) => (UI.provK = +b.value));
-    act('autoProv', () => { App.pushUndo(['prov']); App.Ops.autoProvinces(an.id, UI.provK || 5); App.changed({ pol: true, ui: true }); });
+    act("autoSub", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, 0, Math.random, { keepL1: true }); App.changed({ pol: true, ui: true }); });
+    act("family", () => App.Family.show());
+    act("autoProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, UI.provK || 5); App.changed({ pol: true, ui: true }); });
     act('autoCity', () => { App.pushUndo(); App.Ops.autoCities(an.id); App.changed({ ui: true }); });
-    act('delNation', () => { if (!confirm(`删除「${an.name}」？（可撤销）`)) return; App.pushUndo(['owner', 'prov']); App.Ops.deleteNation(an.id); T().activeNation = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
+    act('delNation', () => { if (!confirm(`删除「${an.name}」？（可撤销）`)) return; App.pushUndo(["owner", "prov", "prov2", "prov3"]); App.Ops.deleteNation(an.id); T().activeNation = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('recolor', () => { App.pushUndo(); App.Ops.recolor(); App.changed({ pol: true, ui: true }); });
-    act('addProv', () => { App.pushUndo(); const pr = App.Ops.addProvince(an.id); T().activeProv = pr.id; T().set('prov'); App.changed({ ui: true }); });
-    act('rndProv', () => { App.pushUndo(); ap.name = App.Names.prov(an.culture); App.changed({ ui: true }); });
-    act('provLblAuto', () => { App.pushUndo(); ap.label = null; App.changed({ ui: true }); });
-    act('delProv', () => { App.pushUndo(['prov']); App.Ops.deleteProvince(ap.id); T().activeProv = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
+    act("addSub", () => { App.pushUndo(); const pr = App.Ops.addProvince(an.id, null, (ap.level || 1) + 1, ap.id); UI.provOpen = UI.provOpen || {}; UI.provOpen[ap.id] = true; T().activeProv = pr.id; T().set("prov"); App.changed({ ui: true }); });
+    act("addProv", () => { App.pushUndo(); const pr = App.Ops.addProvince(an.id, null, 1, 0); T().activeProv = pr.id; T().set('prov'); App.changed({ ui: true }); });
+    act('rndProv', () => { App.pushUndo(); ap.name = App.Names.prov(an.culture, Math.random, ap.level || 1); App.changed({ ui: true }); });
+    act("delProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.deleteProvince(ap.id); T().activeProv = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('loadRef', () => $('#fileImg').click());
     act('delRef', () => { S.meta.ref = null; App.changed({ ui: true }); });
     act('refFit', () => { const r = S.meta.ref; r.x = 0; r.y = 0; r.w = App.WW; r.h = App.HH; App.changed({ ui: true }); });
@@ -244,8 +257,8 @@
     if (k === 'rivers') h += inp('name', '名称') + inp('width', '河口宽度', 'range', 'min="0.6" max="8" step="0.2"') + '<p class="muted">拖动黄色节点修改形状，双击线段加节点，双击节点删节点。</p>';
     if (k === 'lines') h += sel_('style', '样式', App.LINE_STYLES) + inp('color', '颜色(可选)', 'color') + '<p class="muted">拖动节点修改，双击增删节点。</p>';
     if (k === 'arrows') h += nat('nation') + inp('width', '宽度', 'range', 'min="4" max="40"');
-    if (k === 'nationLabel') h += inp('name', '国名') + '<p class="muted">拖动可移动国名；字号与角度在「国家」页调整。</p>';
-    if (k === 'provLabel') h += inp('name', '名称') + field('字号', `<input type="range" min="4" max="60" value="${Math.round(o.label?.size || App.R.labelBoxes.find((b) => b.kind === 'prov' && b.id === o.id)?.size || 14)}" data-plbl="size">`);
+    if (k === "nationLabel") h += inp("name", "国名") + "<p class=\"muted\">国名固定显示在领土最宽处。</p>";
+    if (k === "provLabel") h += inp("name", "名称") + `<p class="muted">${App.LEVELS[o.level || 1].full}，名字固定在区域内。</p>`;
     box.innerHTML = h;
     box.querySelectorAll('[data-o]').forEach((i) => {
       i.onfocus = () => App.pushUndo();
@@ -253,9 +266,7 @@
       i.onchange = () => { App.changed({}); if (k === 'nationLabel') UI.refresh(); };
     });
     box.querySelectorAll('[data-ock]').forEach((i) => (i.onchange = () => { App.pushUndo(); o[i.dataset.ock] = i.checked; App.changed({}); }));
-    box.querySelectorAll('[data-plbl]').forEach((i) => (i.oninput = () => { const b = App.R.labelBoxes.find((b) => b.kind === 'prov' && b.id === o.id); o.label = { x: b?.x, y: b?.y, angle: b?.ang, ...(o.label || {}), size: +i.value }; App.R.request(); App.autosave(); }));
     box.querySelector('[data-sact=del]').onclick = () => {
-      if (k === 'nationLabel') { App.pushUndo(); o.label = null; App.changed({}); return; }
       if (k === 'provLabel') { App.pushUndo(); o.name = ''; T().select(null); App.changed({}); return; }
       T().deleteSel();
     };
@@ -263,7 +274,7 @@
       App.pushUndo();
       const c = App.Ops.cellAt(o.x ?? 0, o.y ?? 0), nn = App.nation(k === 'nationLabel' ? o.id : k === 'provLabel' ? o.nation : c >= 0 ? App.S.owner[c] : 0);
       const cul = nn ? nn.culture : 'huaxia';
-      if (k === 'nationLabel') o.name = App.Names.nation(cul); else if (k === 'provLabel') o.name = App.Names.prov(cul); else if ('name' in o || k === 'cities') o.name = App.Names.city(cul);
+      if (k === 'nationLabel') o.name = App.Names.nation(cul); else if (k === "provLabel") o.name = App.Names.prov(cul, Math.random, o.level || 1); else if ('name' in o || k === 'cities') o.name = App.Names.city(cul);
       App.changed({ ui: true });
     };
   };
@@ -335,4 +346,32 @@
     setTimeout(() => document.fonts && document.fonts.load(`700 20px "${f}"`, '汉字Ab').then(() => App.R.request()), 300);
   };
   UI.loadFont = loadFont;
+})();
+
+// ---- 行政区下拉（按层级缩进）、省/道/府显示切换 ----
+(() => {
+  const UI = App.UI;
+  UI.provOptions = () => {
+    const ps = App.S.provinces.filter((p) => p.nation === App.Tools.activeNation), out = [];
+    const walk = (pid, lv) => ps.filter((p) => (p.level || 1) === lv && (lv === 1 || p.parent === pid)).forEach((p) => {
+      out.push(`<option value="${p.id}" ${p.id === App.Tools.activeProv ? 'selected' : ''}>${'　'.repeat(lv - 1)}${App.LEVELS[lv].name}·${U.esc(p.name)}</option>`);
+      if (lv < 3) walk(p.id, lv + 1);
+    });
+    walk(0, 1); return out.join('');
+  };
+  UI.syncLv = () => {
+    document.querySelectorAll('#lvBtns [data-lv]').forEach((b) => b.classList.toggle('on', !!App.S.meta['lv' + b.dataset.lv]));
+  };
+  UI.initLv = () => {
+    const box = document.getElementById('lvBtns'); if (!box) return;
+    box.innerHTML = '<span>行政区</span>' + [1, 2, 3].map((lv) => `<button class="chip" data-lv="${lv}">${App.LEVELS[lv].name}</button>`).join('');
+    box.onclick = (e) => {
+      const b = e.target.closest('[data-lv]'); if (!b) return;
+      const k = 'lv' + b.dataset.lv;
+      if (e.shiftKey || e.metaKey || e.ctrlKey) { [1, 2, 3].forEach((l) => (App.S.meta['lv' + l] = String(l) === b.dataset.lv)); }
+      else App.S.meta[k] = !App.S.meta[k];
+      UI.syncLv(); App.R.request(); App.autosave(); if (UI.tab === 'layers') UI.refresh();
+    };
+    UI.syncLv();
+  };
 })();
