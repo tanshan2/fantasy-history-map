@@ -68,7 +68,8 @@
         const tn = t === 0 ? '海洋' : t === 1 ? '湖泊' : App.TERRAINS.find((k) => k.id === t)?.name;
         const n = App.nation(S.owner[c]), p = App.province(S.prov[c]);
         const f = S.forest[c] ? App.FORESTS.find((k) => k.id === S.forest[c])?.name : '';
-        s += ` · ${tn}${f ? ' · ' + f : ''}${n ? ' · ' + n.name : ''}${p ? ' · ' + p.name : ''}`;
+        const cl = App.Climate.at(c);
+        s += ` · ${tn}${cl && t >= 2 ? ' · ' + cl.name + '气候' : ''}${f ? ' · ' + f : ''}${n ? ' · ' + n.name : ''}${p ? ' · ' + p.name : ''}`;
       }
     }
     $('#status').textContent = s;
@@ -86,7 +87,7 @@
       case 'select': h ='<span class="hint">点击选中对象，拖动移动；双击折线可增删节点；空白处拖动平移；Delete 删除</span>'; break;
       case 'pan': h = '<span class="hint">拖动平移，滚轮/双指缩放</span>'; break;
       case 'land': h = chips('land', [{ id: 'land', name: '画陆地' }, { id: 'ocean', name: '画海洋' }, { id: 'lake', name: '画湖泊' }]) + brush(); break;
-      case 'terrain': h = chips('terrain', App.TERRAINS) + brush(); break;
+      case 'terrain': h = chips('tmode', [{ id: 'terrain', name: '画地貌' }, { id: 'climate', name: '画气候' }]) + (o.tmode === 'climate' ? chips('climate', App.Climate.LIST.filter(Boolean)) + '<button class="btn small" data-rebiome="1" title="按气候重新铺设整张地图的地貌和森林（山地丘陵保留）">按气候重铺地貌</button>' : chips('terrain', App.TERRAINS)) + brush(); break;
       case 'forest': h = chips('forest', App.FORESTS) + brush(); break;
       case 'river': h = `<label class="rng">河宽 <input type="range" min="0.6" max="6" step="0.2" value="${o.riverWidth}" data-num="riverWidth"><b>${o.riverWidth}</b></label><span class="hint">从源头画向入海口（越画越宽）</span>`; break;
       case 'nation': h = nationPick() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
@@ -104,6 +105,8 @@
       o[b.dataset.opt] = v; UI.refreshTool(); App.R.request();
     }));
     bar.querySelectorAll('[data-num]').forEach((i) => (i.oninput = () => { o[i.dataset.num] = +i.value; i.nextElementSibling.textContent = i.value; App.R.request(); }));
+    bar.querySelectorAll('[data-rebiome]').forEach((b) => (b.onclick = () => { if (!confirm('按气候重新铺设全图的地貌和森林？（山地、丘陵保留，可撤销）')) return; App.pushUndo(['terrain', 'forest']); App.Climate.applyBiomes(App.S); App.changed({ tint: true }); }));
+    if (T().cur === 'terrain' && o.tmode === 'climate' && !App.S.meta.showClimate) { App.S.meta.showClimate = true; App.R.request(); }
     bar.querySelectorAll('[data-sw]').forEach((b) => (b.onclick = () => { o.color = b.dataset.sw; o.erase = false; UI.refreshTool(); }));
     bar.querySelectorAll('[data-cpick]').forEach((i) => (i.oninput = () => { o.color = i.value; o.erase = false; }));
     bar.querySelectorAll('[data-mk]').forEach((i) => (i.onchange = () => (o.makeLand = i.checked)));
@@ -180,7 +183,8 @@
     let h = `<div class="card"><h4>画风</h4><div class="chips">${Object.entries(App.R.STYLES).map(([id, s]) => `<button class="chip ${m.style === id ? 'on' : ''}" data-style="${id}">${s.name}</button>`).join('')}</div>
       ${field('城市样式', `<div class="chips"><button class="chip ${m.cityStyle === 'icon' ? 'on' : ''}" data-city="icon">插画图标</button><button class="chip ${m.cityStyle !== 'icon' ? 'on' : ''}" data-city="dot">简洁圆点</button></div>`)}</div>
     <div class="card"><h4>行政区显示</h4>${ck('lv1', '省（一级）')}${ck('lv2', '道（二级）')}${ck('lv3', '府（三级）')}<br>${ck('showProvLabels', '显示行政区名')}</div>
-    <div class="card"><h4>显示</h4>${ck('showIcons', '山脉/森林图标')}${ck('showGrid', '网格')}${ck('showCityLabels', '城市名')}${ck('showArmies', '军队与箭头')}${ck('showFamilies', '家族旗帜')}</div>
+    <div class="card"><h4>显示</h4>${ck('showIcons', '山脉/森林图标')}${ck('showGrid', '网格')}${ck('showCityLabels', '城市名')}${ck('showArmies', '军队与箭头')}${ck("showFamilies", "家族旗帜")}${ck("showClimate", "气候图")}</div>
+    ${m.showClimate ? `<div class="card"><h4>气候图例</h4><div class="legend">${App.Climate.LIST.filter(Boolean).map((k) => `<div><i style="background:${k.color}"></i><b>${k.name}</b><small>${k.desc}</small></div>`).join("")}</div><p class="muted">用「地貌」工具切到「画气候」可以手动修改气候带。</p></div>` : ""}
     <div class="card"><h4>字体与颜色</h4>${field('中文字体', `<select data-meta-s="labelFont">${fonts.map((f) => `<option ${f === m.labelFont ? 'selected' : ''}>${f}</option>`).join('')}</select>`)}
     ${field('西文字体', `<select data-meta-s="latinFont">${lfonts.map((f) => `<option ${f === m.latinFont ? 'selected' : ''}>${f}</option>`).join('')}</select>`)}
     ${field('海洋颜色', `<input type="color" data-meta-s="ocean" value="${m.ocean}">`)}</div>
@@ -193,7 +197,7 @@
     return h + '</div>';
   };
   const ck2 = (k, n, v) => `<label class="ck"><input type="checkbox" data-refck="${k}" ${v ? 'checked' : ''}> ${n}</label>`;
-  UI.tab_map = () => `<div class="card"><h4>新建 / 生成</h4><div class="row wrap"><button class="btn pri" data-act="newMap">新建或随机生成…</button><button class="btn" data-act="preset">载入示例「天汉历626年」</button></div></div>
+  UI.tab_map = () => `<div class="card"><h4>新建 / 生成</h4><div class="row wrap"><button class="btn pri" data-act="newMap">新建或随机生成…</button><button class="btn" data-act="asia">载入亚洲模板</button><button class="btn" data-act="preset">载入示例「天汉历626年」</button></div></div>
     <div class="card"><h4>旧存档</h4><p class="muted">之前版本自动保存的地图还在浏览器里，需要时可以找回。</p><button class="btn" data-act="oldSave">载入上一版本的存档</button></div>
     <div class="card"><h4>文件</h4><div class="row wrap"><button class="btn" data-act="save">保存为 JSON</button><button class="btn" data-act="open">打开 JSON</button><button class="btn" data-act="png">导出图片</button></div>
     <p class="muted">地图会自动保存在浏览器里（下次打开自动恢复）。想长期保存或换电脑，请「保存为 JSON」。</p></div>
@@ -214,7 +218,7 @@
       i.onchange = () => { App.changed({ ui: true }); UI.refreshTool(); };
     });
     p.querySelectorAll('[data-p]').forEach((i) => { i.onfocus = () => App.pushUndo(); i.oninput = () => { ap[i.dataset.p] = i.value; App.R.request(); }; i.onchange = () => App.changed({ ui: true }); });
-    p.querySelectorAll("[data-meta]").forEach((i) => (i.onchange = () => { S.meta[i.dataset.meta] = i.checked; App.R.request(); App.autosave(); UI.syncLv(); }));
+    p.querySelectorAll("[data-meta]").forEach((i) => (i.onchange = () => { S.meta[i.dataset.meta] = i.checked; App.R.request(); App.autosave(); UI.syncLv(); if (i.dataset.meta === "showClimate") UI.refresh(); }));
     p.querySelectorAll('[data-meta-s]').forEach((i) => (i.oninput = () => { S.meta[i.dataset.metaS] = i.value; loadFont(i.value); App.R.request(); App.autosave(); }));
     p.querySelectorAll('[data-ref]').forEach((i) => (i.oninput = () => {
       const r = S.meta.ref, k = i.dataset.ref, v = +i.value;
@@ -243,7 +247,7 @@
     act('delRef', () => { S.meta.ref = null; App.changed({ ui: true }); });
     act('refFit', () => { const r = S.meta.ref; r.x = 0; r.y = 0; r.w = App.WW; r.h = App.HH; App.changed({ ui: true }); });
     act('oldSave', async () => { const s = await App.DB.get('autosave'); if (!s) { UI.toast('没有找到旧存档'); return; } if (!confirm('用旧存档替换当前地图？（当前地图会被覆盖，建议先保存 JSON）')) return; App.deserialize(JSON.parse(s)); App.afterBigChange(); App.R.fit(); UI.toast('已载入旧存档'); });
-    act('newMap', UI.newDialog); act('preset', () => UI.loadPreset()); act('save', UI.saveJson); act('open', () => $('#fileJson').click()); act('png', UI.exportDialog);
+    act('newMap', UI.newDialog); act("preset", () => UI.loadPreset("tianhan")); act("asia", () => UI.loadPreset("asia")); act('save', UI.saveJson); act('open', () => $('#fileJson').click()); act('png', UI.exportDialog);
   };
 
   // ---------- 选中对象属性 ----------
@@ -296,28 +300,38 @@
   };
   UI.newDialog = () => modal(`<h3>新建地图</h3>
     <div class="opts3">
-      <div class="card"><h4>空白画布</h4><p class="muted">一整张空白羊皮纸，用「彩笔」直接涂色；需要海洋就用「陆海」工具画。</p><button class="btn pri" id="nBlank">创建空白地图</button></div>
-      <div class="card"><h4>随机世界</h4>
-        ${field('国家数量', '<input type="number" id="gN" value="14" min="2" max="60">')}
-        ${field('陆地比例', '<input type="range" id="gL" value="0.42" min="0.2" max="0.7" step="0.02">')}
-        ${field('文明', `<select id="gC"><option value="mixed">混合（东西方）</option><option value="zh">东方诸文明（中文名）</option><option value="latin">西方诸文明（西文名）</option>${App.CULTURES.map((c) => `<option value="${c.id}">仅${c.name}</option>`).join('')}</select>`)}
-        ${field('种子', '<input type="text" id="gS" placeholder="留空随机">')}
-        <button class="btn pri" id="nRand">生成</button></div>
-      <div class="card"><h4>天汉历626年</h4><p class="muted">真实欧亚地理 + 架空势力：汉、西域盟大汗国、东瀛国、云梦国…可在此基础上继续修改。</p><button class="btn pri" id="nPreset">载入预设</button></div>
+      <div class="card"><h4>亚洲模板</h4><p class="muted">你那张图的真实亚洲地理：海岸线、山脉、沙漠、森林、河流、湖泊、气候都在，但没有任何国家，直接用「彩笔」涂色。</p><button class="btn pri" id="nAsia">载入亚洲模板</button>
+        <h4 style="margin-top:14px">天汉历626年</h4><p class="muted">同一张亚洲地图，加上汉、西域盟大汗国、东瀛国等势力、城市和家族的完整示例。</p><button class="btn" id="nPreset">载入示例</button></div>
+      <div class="card"><h4>随机大陆</h4>
+        <div class="grid2">${field('大陆数量', '<input type="number" id="gK" value="3" min="1" max="7">')}${field('陆地比例', '<input type="range" id="gL" value="0.4" min="0.2" max="0.7" step="0.02">')}</div>
+        ${field('海岛 / 群岛', '<select id="gI"><option value="0">没有</option><option value="1">少量</option><option value="2" selected>中等</option><option value="3">很多（群岛）</option></select>')}
+        ${field('海岸破碎度（海湾、半岛多少）', '<input type="range" id="gR" value="0.6" min="0" max="1" step="0.05">')}
+        ${field('气候范围', `<select id="gB">${Object.entries(App.Gen.BANDS).map(([k, b]) => `<option value="${k}">${b.name}</option>`).join('')}</select>`)}
+        <label class="ck"><input type="checkbox" id="gNat"> 同时生成国家、城市和家族</label>
+        <div id="gNatOpts" hidden><div class="grid2">${field('国家数量', '<input type="number" id="gN" value="12" min="2" max="60">')}${field('文明', `<select id="gC"><option value="mixed">混合</option><option value="zh">东方诸文明</option><option value="latin">西方诸文明</option>${App.CULTURES.map((c) => `<option value="${c.id}">仅${c.name}</option>`).join('')}</select>`)}</div></div>
+        ${field('种子（同一个种子生成同一张图）', '<input type="text" id="gS" placeholder="留空随机">')}
+        <button class="btn pri" id="nRand">生成大陆</button></div>
+      <div class="card"><h4>空白画布</h4><p class="muted">一整张空白羊皮纸，用「彩笔」直接涂色；需要海洋就用「陆海」工具画。</p><button class="btn" id="nBlank">创建空白地图</button></div>
     </div><div class="row end"><button class="btn" data-close>取消</button></div>`, (m) => {
-    $('#nBlank', m).onclick = () => { T().sel = null; m.hidden = true; App.Gen.blank(); App.afterBigChange(); App.R.fit(); };
+    $('#gNat', m).onchange = (e) => ($('#gNatOpts', m).hidden = !e.target.checked);
+    $('#nBlank', m).onclick = () => { T().sel = null; m.hidden = true; App.Gen.blank(); App.afterBigChange(); App.R.fit(); T().set('color'); };
+    $('#nAsia', m).onclick = () => { m.hidden = true; UI.loadPreset('asia'); };
     $('#nRand', m).onclick = () => { T().sel = null;
       const s = $('#gS', m).value.trim(); m.hidden = true;
-      UI.busy('正在生成世界…', () => {
-        App.Gen.random({ nations: +$('#gN', m).value || 14, land: +$('#gL', m).value, culture: $('#gC', m).value, seed: s ? (isNaN(+s) ? [...s].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0 : +s) : undefined });
-        T().activeNation = 0; T().activeProv = 0; App.afterBigChange(); App.R.fit();
+      const o = { continents: +$('#gK', m).value || 3, land: +$('#gL', m).value, islands: +$('#gI', m).value, rough: +$('#gR', m).value, band: $('#gB', m).value,
+        nations: $('#gNat', m).checked ? +$('#gN', m).value || 12 : 0, culture: $('#gC', m).value,
+        seed: s ? (isNaN(+s) ? [...s].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) : +s) : undefined };
+      UI.busy('正在生成大陆与气候…', () => {
+        const seed = App.Gen.random(o);
+        T().activeNation = 0; T().activeProv = 0; App.afterBigChange(); App.R.fit(); if (!o.nations) T().set('color');
+        UI.toast('种子：' + seed + '（记下它可以再次生成同一张图）');
       });
     };
-    $('#nPreset', m).onclick = () => { m.hidden = true; UI.loadPreset(); };
+    $('#nPreset', m).onclick = () => { m.hidden = true; UI.loadPreset('tianhan'); };
   });
-  UI.loadPreset = () => { T().sel = null;
+  UI.loadPreset = (which = 'tianhan') => { T().sel = null;
     UI.busy('正在载入真实地理数据…', async () => {
-      try { await App.Preset.tianhan(); T().activeNation = 0; App.afterBigChange(); App.R.fit(); } catch (e) { console.error(e); UI.toast('载入失败：' + e.message); }
+      try { await App.Preset[which](); T().activeNation = 0; App.afterBigChange(); App.R.fit(); if (which === 'asia') T().set('color'); } catch (e) { console.error(e); UI.toast('载入失败：' + e.message); }
     });
   };
   UI.busy = (msg, fn) => {
