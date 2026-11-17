@@ -21,8 +21,12 @@ App.CITY_TYPES = [
   { id: 'port', name: '港口' }, { id: 'pass', name: '关隘' },
 ];
 App.ARMY_TYPES = [
-  { id: 'infantry', name: '步兵' }, { id: 'cavalry', name: '骑兵' }, { id: 'archer', name: '弓弩' },
-  { id: 'siege', name: '器械' }, { id: 'navy', name: '水军' },
+  { id: 'infantry', name: '轻步兵', g: '步兵' }, { id: 'heavyInf', name: '重步兵', g: '步兵' }, { id: 'spear', name: '长枪兵', g: '步兵' },
+  { id: 'shield', name: '刀盾兵', g: '步兵' }, { id: 'archer', name: '弓兵', g: '步兵' }, { id: 'crossbow', name: '弩兵', g: '步兵' },
+  { id: 'guard', name: '禁军', g: '步兵' }, { id: 'militia', name: '民兵', g: '步兵' },
+  { id: 'cavalry', name: '轻骑兵', g: '骑兵' }, { id: 'heavyCav', name: '重骑兵', g: '骑兵' }, { id: 'horseArcher', name: '骑射手', g: '骑兵' },
+  { id: 'lancer', name: '枪骑兵', g: '骑兵' }, { id: 'camel', name: '骆驼骑兵', g: '骑兵' }, { id: 'elephant', name: '战象', g: '骑兵' },
+  { id: 'chariot', name: '战车', g: '其他' }, { id: 'siege', name: '攻城器械', g: '其他' }, { id: 'navy', name: '水军', g: '其他' },
 ];
 App.LINE_STYLES = [
   { id: 'border', name: '国界线' }, { id: 'admin', name: '行政界' }, { id: 'road', name: '道路' },
@@ -31,8 +35,8 @@ App.LINE_STYLES = [
 App.MARKER_TYPES = [
   { id: 'battle', name: '战役' }, { id: 'ruin', name: '遗迹' }, { id: 'temple', name: '寺庙' }, { id: 'mine', name: '矿产' },
 ];
-App.PALETTE = ['#e8735a', '#f0c75e', '#e6a15f', '#8fb39b', '#b9c97a', '#a4c46a', '#d98a8a', '#c4a07f',
-  '#9fb0c9', '#d6c27a', '#b48fb3', '#e3b4a0', '#88b4a8', '#c9d48a', '#e7955a', '#a8a0c8', '#cfa36f', '#7fb6d4', '#e2a3c2', '#9cc58f'];
+App.PALETTE = ['#f2a766', '#e67d72', '#b9dcc0', '#e8c3cf', '#a2c45f', '#8fc9db', '#c8de98', '#f3cf6e', '#c6a6dc', '#e7a7a0', '#9fd0b0', '#d9b48a',
+  '#f0b9a0', '#a8bfe8', '#dcd67a', '#e59bbd', '#9ec7a0', '#f5b98a', '#b5d3e0', '#d8a6a6'];
 
 const U = (App.U = {});
 U.clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
