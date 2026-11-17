@@ -23,7 +23,7 @@
   };
   O.addNation = (o = {}) => {
     const culture = o.culture || 'huaxia';
-    const n = { id: App.nid(), name: o.name || App.Names.nation(culture), color: o.color || O.pickColor(), culture, label: null };
+    const n = { id: App.nid(), name: o.name != null ? o.name : App.Names.nation(culture), color: o.color || O.pickColor(), culture, label: null };
     App.S.nations.push(n); return n;
   };
   O.addProvince = (nid, name, level = 1, parent = 0) => {
