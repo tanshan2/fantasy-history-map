@@ -137,11 +137,7 @@
 
   App.Gen.blank = () => {
     const S = App.newState(); App.S = S; S.meta.name = '空白地图';
-    // 一块小小的初始陆地
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const d = Math.hypot((x - W / 2) / 120, (y - H / 2) / 80) + (U.fbm(x / 30, y / 30, 3, 4) - 0.5) * 0.7;
-      if (d < 1) S.terrain[y * W + x] = 2;
-    }
+    S.terrain.fill(2); // 整张空白羊皮纸
     App.undoStack.length = 0; App.redoStack.length = 0;
   };
 })();
