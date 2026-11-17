@@ -6,18 +6,18 @@
 
   // 两种画风
   R.STYLES = {
+    parchment: { name: '羊皮纸（偏暗做旧）', ocean: '#304a66', seaAlpha: 1, vignette: 'rgba(5,10,20,0.45)', grid: 'rgba(200,215,225,0.12)', aged: true,
+      glow: [150, 186, 200], glowD: 8, glowA: 0.85, glowP: 1.6, nationA: 0.78, band: 0.9, paper: 1, tintA: 1,
+      prov: ['rgba(70,45,30,.6)', 'rgba(70,45,30,.5)', 'rgba(70,45,30,.4)'], provW: [1.1, 0.8, 0.6], provDash: [[4, 2.5], [2.5, 2], [1, 1.8]],
+      borderShade: -0.55, borderW: 1.3, coast: '#1b2f45', coastW: 1.7, river: '#3f6f8a',
+      label: (n) => U.rgba(U.shade(n.color, -0.8), 0.9), labelHalo: 'rgba(235,220,185,0.45)', provLabel: null, city: '#2e2218', cityHalo: 'rgba(236,222,190,.85)', ink: false },
     vivid: { name: '鲜明（游戏地图风）', ocean: '#3a86e0', seaAlpha: 0.75, vignette: 'rgba(10,40,110,0.25)', grid: 'rgba(255,255,255,0.13)',
       glow: [126, 186, 245], glowD: 4, glowA: 0.95, glowP: 0.7, nationA: 0.9, band: 0.35, paper: 0.55, tintA: 0.55,
       prov: ['rgba(120,120,120,.9)', 'rgba(140,140,140,.8)', 'rgba(150,150,150,.6)'], provW: [1.3, 0.95, 0.65], provDash: [null, null, [2, 2.2]],
       borderShade: -0.38, borderW: 2.3, coast: '#454f5c', coastW: 2.8, river: '#1f8c9a',
       label: (n) => '#2c2c2c', labelHalo: null, provLabel: 'rgba(45,45,45,.72)', city: '#2b2b2b', cityHalo: 'rgba(255,255,255,.75)', ink: true },
-    parchment: { name: '羊皮纸（手绘风）', ocean: '#3e5f8a', seaAlpha: 1, vignette: 'rgba(0,10,30,0.35)', grid: 'rgba(200,220,240,0.16)',
-      glow: [172, 214, 236], glowD: 9, glowA: 0.95, glowP: 1.6, nationA: 0.72, band: 0.9, paper: 1, tintA: 1,
-      prov: ['rgba(70,45,30,.6)', 'rgba(70,45,30,.5)', 'rgba(70,45,30,.4)'], provW: [1.1, 0.8, 0.6], provDash: [[4, 2.5], [2.5, 2], [1, 1.8]],
-      borderShade: -0.55, borderW: 1.3, coast: '#1d3a63', coastW: 1.6, river: '#4c87ad',
-      label: (n) => U.rgba(U.shade(n.color, -0.78), 0.92), labelHalo: 'rgba(250,240,215,0.55)', provLabel: null, city: '#2e2218', cityHalo: 'rgba(248,240,218,.85)', ink: false },
   };
-  const ST = () => R.STYLES[App.S.meta.style] || R.STYLES.vivid;
+  const ST = () => R.STYLES[App.S.meta.style] || R.STYLES.parchment;
 
   R.init = (cv) => { canvas = cv; ctx = cv.getContext('2d'); R.resize(); };
   R.resize = () => {
@@ -80,6 +80,7 @@
     S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.fillStyle = U.rgba(n.color, st.nationA); c.fill(p, 'evenodd'); });
     c.globalAlpha = st.band; c.drawImage(G.bandCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
     c.globalAlpha = st.paper; c.globalCompositeOperation = 'multiply'; c.fillStyle = pats.paper; c.fillRect(0, 0, WW, HH); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1;
+    if (st.aged) { c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(222,200,158)'; c.fillRect(0, 0, WW, HH); c.globalCompositeOperation = 'source-over'; }
     // 行政区界（三级，从细到粗）
     if (G.provPaths) for (let lv = 3; lv >= 1; lv--) {
       if (!S.meta['lv' + lv] || !G.provPaths[lv]) continue;
@@ -109,6 +110,12 @@
     S.lines.forEach((l) => drawLine(c, l, sw));
     if (S.meta.showArmies) S.arrows.forEach((a) => drawArrow(c, a, sw));
     S.markers.forEach((m) => drawMarker(c, m, s, sw));
+    if (st.aged) {
+      const ag = c.createRadialGradient(WW / 2, HH / 2, HH * 0.35, WW / 2, HH / 2, WW * 0.62);
+      ag.addColorStop(0, 'rgba(255,255,255,0)'); ag.addColorStop(1, 'rgba(120,85,40,0.55)');
+      c.globalCompositeOperation = 'multiply'; c.fillStyle = ag; c.fillRect(0, 0, WW, HH);
+      c.fillStyle = pats.paper; c.globalAlpha = 0.35; c.fillRect(0, 0, WW, HH); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    }
     // 城市
     const u = 6 * Math.pow(s, 0.5) / s;
     R.cityBoxes = [];
