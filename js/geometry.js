@@ -92,13 +92,7 @@
     // 海岸光晕
     const land = (c) => T[c] >= 2;
     const d = bfs(land, (c) => !land(c), 9);
-    const gctx = G.glowCanvas.getContext('2d'), gi = gctx.createImageData(W, H);
-    for (let c = 0; c < N; c++) {
-      const dd = d[c]; let a = 0;
-      if (dd > 0 && dd < 255) a = Math.pow(1 - dd / 10, 1.6) * 0.95;
-      gi.data[c * 4] = 172; gi.data[c * 4 + 1] = 214; gi.data[c * 4 + 2] = 236; gi.data[c * 4 + 3] = a * 255;
-    }
-    gctx.putImageData(gi, 0, 0);
+    G.coastDist = d; G.glowKey = null;
     G.rebuildTint(); G.rebuildIcons();
     G.dirtyLand = false;
   };
@@ -133,7 +127,7 @@
       const f = S.forest[c];
       if (f && !placed) {
         const rf = U.hash(x, y, 7);
-        if (rf < (t === 5 || t === 6 ? 0.12 : 0.3)) icons.push({ x: px, y: py, k: 'tree' + f, v, s: f === 3 ? 7.5 : 6 + U.hash(x, y, 8) * 1.6, r: rf });
+        if (rf < (t === 5 || t === 6 ? 0.06 : 0.15)) icons.push({ x: px, y: py, k: 'tree' + f, v, s: (f === 3 ? 11 : f === 6 ? 10 : 9) + U.hash(x, y, 8) * 2.5, r: rf });
       }
     }
     icons.sort((a, b) => a.y - b.y);
@@ -141,19 +135,26 @@
   };
 
   G.rebuildPolitical = () => {
-    const S = App.S, O = S.owner, P = S.prov;
+    const S = App.S, O = S.owner, P1 = S.prov, P2 = S.prov2, P3 = S.prov3;
     // 国家路径
     const m = G.collect((c) => O[c]);
     G.nationPaths = new Map();
     m.forEach((edges, id) => G.nationPaths.set(id, G.pathOf(edges)));
-    // 行政区界（同国不同省）
-    const pe = [];
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const c = y * W + x, o = O[c]; if (!o) continue;
-      if (x + 1 < W && O[c + 1] === o && P[c + 1] !== P[c]) pe.push(((y * VW + x + 1) << 1) | 1);
-      if (y + 1 < H && O[c + W] === o && P[c + W] !== P[c]) pe.push(((y + 1) * VW + x) << 1);
-    }
-    G.provPath = G.pathOf(pe);
+    // 三级行政区界：上级相同、本级不同
+    const lvEdges = (same, A) => {
+      const pe = [];
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const c = y * W + x; if (!O[c]) continue;
+        if (x + 1 < W && same(c, c + 1) && A[c + 1] !== A[c]) pe.push(((y * VW + x + 1) << 1) | 1);
+        if (y + 1 < H && same(c, c + W) && A[c + W] !== A[c]) pe.push(((y + 1) * VW + x) << 1);
+      }
+      return G.pathOf(pe);
+    };
+    G.provPaths = [null,
+      lvEdges((a, b) => O[a] === O[b], P1),
+      lvEdges((a, b) => O[a] === O[b] && P1[a] === P1[b], P2),
+      lvEdges((a, b) => O[a] === O[b] && P2[a] === P2[b], P3)];
+    G.provPath = G.provPaths[1];
     // 内侧色带
     const border = (c) => {
       const o = O[c]; if (!o) return false; const x = c % W, y = (c / W) | 0;
@@ -169,42 +170,51 @@
       D[c * 4] = col[0]; D[c * 4 + 1] = col[1]; D[c * 4 + 2] = col[2]; D[c * 4 + 3] = (1 - dd / 4.2) * 150;
     }
     ctx.putImageData(im, 0, 0);
-    G.labels = compStats(O); G.provLabels = compStats(P);
+    G.labels = labelStats(O);
+    G.provLabels = new Map([...labelStats(P1), ...labelStats(P2), ...labelStats(P3)]);
     G.dirtyPol = false;
   };
 
-  // 每个区域最大连通块的质心与主轴
-  const compStats = (A) => {
-    const seen = new Uint8Array(N), q = new Int32Array(N), best = new Map();
-    for (let s = 0; s < N; s++) {
-      const id = A[s]; if (!id || seen[s]) continue;
-      let qh = 0, qt = 0; q[qt++] = s; seen[s] = 1;
-      let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
-      while (qh < qt) {
-        const c = q[qh++], x = c % W, y = (c / W) | 0;
-        n++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
-        if (x > 0 && !seen[c - 1] && A[c - 1] === id) { seen[c - 1] = 1; q[qt++] = c - 1; }
-        if (x < W - 1 && !seen[c + 1] && A[c + 1] === id) { seen[c + 1] = 1; q[qt++] = c + 1; }
-        if (y > 0 && !seen[c - W] && A[c - W] === id) { seen[c - W] = 1; q[qt++] = c - W; }
-        if (y < H - 1 && !seen[c + W] && A[c + W] === id) { seen[c + W] = 1; q[qt++] = c + W; }
-      }
-      const prev = best.get(id);
-      if (!prev || prev.n < n) {
-        const cx = sx / n, cy = sy / n, vxx = sxx / n - cx * cx, vyy = syy / n - cy * cy, vxy = sxy / n - cx * cy;
-        const tr = vxx + vyy, det = vxx * vyy - vxy * vxy, disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
-        const l1 = tr / 2 + disc, l2 = Math.max(0.01, tr / 2 - disc);
-        let ang = Math.atan2(l1 - vxx, vxy || 1e-6); if (Math.abs(vxy) < 1e-6) ang = vxx >= vyy ? 0 : Math.PI / 2;
-        if (ang > Math.PI / 2) ang -= Math.PI; if (ang < -Math.PI / 2) ang += Math.PI;
-        // 找到质心附近属于该块的格子
-        let px = Math.round(cx), py = Math.round(cy);
-        if (A[py * W + px] !== id) {
-          let bd = Infinity;
-          for (let i = 0; i < qt; i += Math.max(1, (qt / 4000) | 0)) { const c = q[i], x = c % W, y = (c / W) | 0, dd = (x - cx) ** 2 + (y - cy) ** 2; if (dd < bd) { bd = dd; px = x; py = y; } }
-        }
-        best.set(id, { n, x: (px + 0.5) * C, y: (py + 0.5) * C, ang, L: 4 * Math.sqrt(l1) * C, M: 4 * Math.sqrt(l2) * C });
-      }
+  // 区域标签：放在离边界最远的位置（区域最“厚”处），并给出主轴方向与可用尺寸
+  const labelStats = (A) => {
+    // 离区域边界的距离（BFS，8邻域近似）
+    const dist = new Uint16Array(N), q = new Int32Array(N); let qh = 0, qt = 0;
+    for (let c = 0; c < N; c++) {
+      const id = A[c]; if (!id) continue;
+      const x = c % W, y = (c / W) | 0;
+      if (x === 0 || y === 0 || x === W - 1 || y === H - 1 || A[c - 1] !== id || A[c + 1] !== id || A[c - W] !== id || A[c + W] !== id) { dist[c] = 1; q[qt++] = c; }
     }
-    return best;
+    while (qh < qt) {
+      const c = q[qh++], id = A[c], x = c % W, y = (c / W) | 0, dc = dist[c];
+      const nb = [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1];
+      for (const n of nb) if (n >= 0 && A[n] === id && !dist[n]) { dist[n] = dc + 1; q[qt++] = n; }
+    }
+    // 统计：面积、质心、协方差
+    const st = new Map();
+    for (let c = 0; c < N; c++) {
+      const id = A[c]; if (!id) continue;
+      let s = st.get(id); if (!s) st.set(id, (s = { n: 0, sx: 0, sy: 0, sxx: 0, syy: 0, sxy: 0, best: -1, bd: -1 }));
+      const x = c % W, y = (c / W) | 0;
+      s.n++; s.sx += x; s.sy += y; s.sxx += x * x; s.syy += y * y; s.sxy += x * y;
+    }
+    for (let c = 0; c < N; c++) {
+      const id = A[c]; if (!id) continue;
+      const s = st.get(id), x = c % W, y = (c / W) | 0;
+      const cx = s.sx / s.n, cy = s.sy / s.n;
+      const score = dist[c] - 0.02 * Math.hypot(x - cx, y - cy);
+      if (score > s.bd) { s.bd = score; s.best = c; }
+    }
+    const out = new Map();
+    st.forEach((s, id) => {
+      const cx = s.sx / s.n, cy = s.sy / s.n, vxx = s.sxx / s.n - cx * cx, vyy = s.syy / s.n - cy * cy, vxy = s.sxy / s.n - cx * cy;
+      const tr = vxx + vyy, det = vxx * vyy - vxy * vxy, disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
+      const l1 = tr / 2 + disc, l2 = Math.max(0.01, tr / 2 - disc);
+      let ang = Math.abs(vxy) < 1e-6 ? (vxx >= vyy ? 0 : Math.PI / 2) : Math.atan2(l1 - vxx, vxy);
+      if (ang > Math.PI / 2) ang -= Math.PI; if (ang < -Math.PI / 2) ang += Math.PI;
+      const b = s.best, r = dist[b];
+      out.set(id, { n: s.n, x: ((b % W) + 0.5) * C, y: (((b / W) | 0) + 0.5) * C, ang, r: r * C, L: Math.min(4 * Math.sqrt(l1), r * 5) * C, M: 4 * Math.sqrt(l2) * C });
+    });
+    return out;
   };
 
   G.update = () => {
@@ -214,3 +224,16 @@
     if (G.dirtyPol) G.rebuildPolitical();
   };
 })();
+
+// 海岸光晕（随画风变化）
+App.Geo.buildGlow = (key, rgb, maxD, alpha, power) => {
+  const G = App.Geo; if (G.glowKey === key || !G.coastDist) return;
+  const W = App.W, H = App.H, N = App.N, d = G.coastDist;
+  const gctx = G.glowCanvas.getContext('2d'), gi = gctx.createImageData(W, H);
+  for (let c = 0; c < N; c++) {
+    const dd = d[c]; let a = 0;
+    if (dd > 0 && dd < 255 && dd <= maxD) a = Math.pow(1 - dd / (maxD + 1), power) * alpha;
+    gi.data[c * 4] = rgb[0]; gi.data[c * 4 + 1] = rgb[1]; gi.data[c * 4 + 2] = rgb[2]; gi.data[c * 4 + 3] = a * 255;
+  }
+  gctx.putImageData(gi, 0, 0); G.glowKey = key;
+};
