@@ -110,6 +110,7 @@
       D[c * 4] = r; D[c * 4 + 1] = g; D[c * 4 + 2] = b; D[c * 4 + 3] = 255;
     }
     ctx.putImageData(im, 0, 0);
+    if (App.Climate) App.Climate.rebuild();
   };
 
   G.rebuildIcons = () => {
