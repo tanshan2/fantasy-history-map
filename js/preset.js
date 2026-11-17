@@ -170,14 +170,14 @@
   ];
 
   App.Preset = {};
-  App.Preset.tianhan = async () => {
+  // 真实亚洲地理（海岸、湖泊、山脉、沙漠、森林、河流、气候），不含任何势力
+  const buildBase = async () => {
     if (!window.topojson) throw new Error('地图库未加载（需要联网）');
     const res = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-50m.json');
     const topo = await res.json();
     const fc = topojson.feature(topo, topo.objects.land);
     const feats = fc.features || [fc];
     const S = App.newState(); App.S = S;
-    S.meta.name = '天汉历626年'; S.meta.labelFont = 'Noto Serif SC';
     const land = raster((x) => {
       feats.forEach((f) => {
         const g = f.geometry; const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
@@ -232,6 +232,17 @@
     }
     // 河流
     RIVERS.forEach(([name, w, pts]) => S.rivers.push({ id: App.nid(), name, pts: P(pts), width: w * 0.9 }));
+    App.Climate.fromGeo(S, (x) => LON0 + ((x + 0.5) / W) * (LON1 - LON0), (y) => LAT1 - ((y + 0.5) / H) * (LAT1 - LAT0));
+    return S;
+  };
+  App.Preset.asia = async () => {
+    const S = await buildBase();
+    S.meta.name = '亚洲模板'; S.meta.year = 1;
+    App.undoStack.length = 0; App.redoStack.length = 0;
+  };
+  App.Preset.tianhan = async () => {
+    const S = await buildBase();
+    S.meta.name = '天汉历626年';
     // 势力
     const nat = {}; Object.entries(NATIONS).forEach(([k, v]) => {
       const n = App.Ops.addNation({ name: v.name, color: v.color, culture: v.culture });
