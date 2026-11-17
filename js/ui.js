@@ -1,0 +1,338 @@
+// ===== 界面 =====
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const T = () => App.Tools;
+  const UI = (App.UI = { tab: 'nations' });
+  const opt = (arr, v) => arr.map((a) => `<option value="${a.id}" ${a.id === v ? 'selected' : ''}>${U.esc(a.name)}</option>`).join('');
+  const ICON = {
+    select: '<path d="M5 3l12 8-6 1 3 6-2 1-3-6-4 4z"/>',
+    pan: '<path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+    land: '<path d="M3 15c2-5 5-8 9-7s4-4 8-2c1 5-2 10-7 11s-9 2-10-2z"/>',
+    terrain: '<path d="M2 20l7-12 4 6 3-4 6 10z"/>',
+    forest: '<path d="M8 3l5 8h-3l4 6H2l4-6H3zM16 7l4 7h-2l3 5h-5l-1-2"/><rect x="7" y="17" width="2" height="4"/>',
+    river: '<path d="M4 3c6 3-4 7 3 10s-3 6 4 8" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M14 3c4 3-2 6 3 9" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+    nation: '<path d="M5 21V3M5 4h12l-3 4 3 4H5" />',
+    prov: '<rect x="3" y="3" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 11h8V3M11 11l5 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2"/>',
+    line: '<path d="M3 18L9 8l5 7 7-11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="4 2"/>',
+    city: '<path d="M3 21V10l4-3 4 3v11zM13 21V5l4-2 4 2v16z"/>',
+    army: '<rect x="3" y="6" width="18" height="12" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 6l18 12M21 6L3 18" stroke="currentColor" stroke-width="1.6"/>',
+    arrow: '<path d="M3 17c4-1 8-5 11-9l-3-1 8-4-1 9-2-3c-3 4-7 8-12 10z"/>',
+    marker: '<path d="M4 4l16 16M20 4L4 20" stroke="currentColor" stroke-width="2.6"/><path d="M4 8l4-4M16 4l4 4" stroke="currentColor" stroke-width="2"/>',
+    text: '<path d="M4 5h16v3h-6v12h-4V8H4z"/>',
+  };
+  const TOOLS = [['select', '选择', 'V'], ['pan', '平移', 'H'], ['land', '陆海', 'L'], ['terrain', '地貌', 'T'], ['forest', '森林', 'F'], ['river', '河流', 'R'],
+    ['nation', '国家', 'N'], ['prov', '行政区', 'P'], ['line', '线条', 'B'], ['city', '城市', 'C'], ['army', '军队', 'A'], ['arrow', '进军', 'W'], ['marker', '标记', 'M'], ['text', '文字', 'X']];
+
+  UI.init = () => {
+    $('#tools').innerHTML = TOOLS.map(([id, n, k]) => `<button class="tool" data-tool="${id}" title="${n}（${k}）"><svg viewBox="0 0 24 24" fill="currentColor">${ICON[id]}</svg><span>${n}</span></button>`).join('');
+    $('#tools').addEventListener('click', (e) => { const b = e.target.closest('[data-tool]'); if (b) T().set(b.dataset.tool); });
+    document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => { UI.tab = b.dataset.tab; UI.refresh(); }));
+    $('#btnNew').onclick = UI.newDialog; $('#btnOpen').onclick = () => $('#fileJson').click();
+    $('#btnSave').onclick = UI.saveJson; $('#btnPng').onclick = UI.exportDialog;
+    $('#btnUndo').onclick = App.undo; $('#btnRedo').onclick = App.redo; $('#btnHelp').onclick = UI.help;
+    $('#btnFit').onclick = App.R.fit;
+    const zc = (f) => { const r = $('#map').getBoundingClientRect(); T().zoomAt(r.width / 2, r.height / 2, f); };
+    $('#zIn').onclick = () => zc(1.4); $('#zOut').onclick = () => zc(1 / 1.4);
+    $('#panelToggle').onclick = () => document.body.classList.toggle('panel-open');
+    $('#fileJson').onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try { App.deserialize(JSON.parse(await f.text())); App.afterBigChange(); App.R.fit(); UI.toast('已打开：' + f.name); } catch (err) { UI.toast('打开失败：' + err.message); }
+      e.target.value = '';
+    };
+    $('#fileImg').onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => { const im = new Image(); im.onload = () => {
+        const r = Math.min(App.WW / im.width, App.HH / im.height);
+        App.S.meta.ref = { src: rd.result, x: (App.WW - im.width * r) / 2, y: (App.HH - im.height * r) / 2, w: im.width * r, h: im.height * r, ar: im.width / im.height, opacity: 0.5, visible: true };
+        UI.tab = 'layers'; UI.refresh(); App.R.request(); App.autosave();
+      }; im.src = rd.result; };
+      rd.readAsDataURL(f); e.target.value = '';
+    };
+    $('#mapName').addEventListener('change', (e) => { App.S.meta.name = e.target.value; App.autosave(); });
+    UI.refreshTool(); UI.refresh();
+  };
+
+  // ---------- 提示 ----------
+  let toastT = 0;
+  UI.toast = (msg) => { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); };
+  UI.flash = (msg) => { const s = $('#saveState'); s.textContent = msg; clearTimeout(s._t); s._t = setTimeout(() => (s.textContent = ''), 1500); };
+  UI.status = (wx, wy) => {
+    const v = App.R.view; let s = `缩放 ${Math.round(v.s * 100)}%`;
+    if (wx != null) {
+      const c = App.Ops.cellAt(wx, wy);
+      if (c >= 0) {
+        const S = App.S, t = S.terrain[c];
+        const tn = t === 0 ? '海洋' : t === 1 ? '湖泊' : App.TERRAINS.find((k) => k.id === t)?.name;
+        const n = App.nation(S.owner[c]), p = App.province(S.prov[c]);
+        const f = S.forest[c] ? App.FORESTS.find((k) => k.id === S.forest[c])?.name : '';
+        s += ` · ${tn}${f ? ' · ' + f : ''}${n ? ' · ' + n.name : ''}${p ? ' · ' + p.name : ''}`;
+      }
+    }
+    $('#status').textContent = s;
+  };
+
+  // ---------- 工具选项栏 ----------
+  const chips = (key, arr) => `<div class="chips">${arr.map((a) => `<button class="chip ${T().opt[key] === a.id ? 'on' : ''}" data-opt="${key}" data-val="${a.id}">${U.esc(a.name)}</button>`).join('')}</div>`;
+  const brush = () => `<label class="rng">笔刷 <input type="range" min="0.5" max="40" step="0.5" value="${T().opt.brush}" data-num="brush"><b>${T().opt.brush}</b></label>`;
+  const nationPick = () => `<label>国家 <select data-act="activeNation"><option value="0">— 选择国家 —</option>${App.S.nations.map((n) => `<option value="${n.id}" ${n.id === T().activeNation ? 'selected' : ''}>${U.esc(n.name)}</option>`).join('')}</select></label>`;
+  UI.refreshTool = () => {
+    document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('on', b.dataset.tool === T().cur));
+    const o = T().opt; let h = '';
+    switch (T().cur) {
+      case 'select': h = '<span class="hint">点击选中对象，拖动移动；双击折线可增删节点；空白处拖动平移；Delete 删除</span>'; break;
+      case 'pan': h = '<span class="hint">拖动平移，滚轮/双指缩放</span>'; break;
+      case 'land': h = chips('land', [{ id: 'land', name: '画陆地' }, { id: 'ocean', name: '画海洋' }, { id: 'lake', name: '画湖泊' }]) + brush(); break;
+      case 'terrain': h = chips('terrain', App.TERRAINS) + brush(); break;
+      case 'forest': h = chips('forest', App.FORESTS) + brush(); break;
+      case 'river': h = `<label class="rng">河宽 <input type="range" min="0.6" max="6" step="0.2" value="${o.riverWidth}" data-num="riverWidth"><b>${o.riverWidth}</b></label><span class="hint">从源头画向入海口（越画越宽）</span>`; break;
+      case 'nation': h = nationPick() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
+      case 'prov': h = `<label>行政区 <select data-act="activeProv"><option value="0">— 选择 —</option>${App.S.provinces.filter((p) => p.nation === T().activeNation).map((p) => `<option value="${p.id}" ${p.id === T().activeProv ? 'selected' : ''}>${U.esc(p.name)}</option>`).join('')}</select></label>` + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
+      case 'line': h = chips('lineStyle', App.LINE_STYLES) + '<span class="hint">按住拖动绘制</span>'; break;
+      case 'city': h = chips('cityType', App.CITY_TYPES) + '<span class="hint">点击放置，名字按所在国文明自动生成</span>'; break;
+      case 'army': h = nationPick() + chips('armyType', App.ARMY_TYPES) + `<label>兵力 <input type="text" size="5" value="${U.esc(o.strength)}" data-str="strength"></label>`; break;
+      case 'arrow': h = nationPick() + `<label class="rng">宽度 <input type="range" min="4" max="40" step="1" value="${o.arrowWidth}" data-num="arrowWidth"><b>${o.arrowWidth}</b></label>`; break;
+      case 'marker': h = chips('markerType', App.MARKER_TYPES); break;
+      case 'text': h = `<label class="rng">字号 <input type="range" min="8" max="120" step="1" value="${o.textSize}" data-num="textSize"><b>${o.textSize}</b></label><span class="hint">点击地图放置文字（海名、地区名、标题框…）</span>`; break;
+    }
+    const bar = $('#optbar'); bar.innerHTML = h;
+    bar.querySelectorAll('[data-opt]').forEach((b) => (b.onclick = () => {
+      let v = b.dataset.val; if (v === 'true') v = true; else if (v === 'false') v = false; else if (/^\d+$/.test(v)) v = +v;
+      o[b.dataset.opt] = v; UI.refreshTool(); App.R.request();
+    }));
+    bar.querySelectorAll('[data-num]').forEach((i) => (i.oninput = () => { o[i.dataset.num] = +i.value; i.nextElementSibling.textContent = i.value; App.R.request(); }));
+    bar.querySelectorAll('[data-str]').forEach((i) => (i.oninput = () => (o[i.dataset.str] = i.value)));
+    bar.querySelectorAll('[data-act=activeNation]').forEach((s) => (s.onchange = () => { T().activeNation = +s.value; T().activeProv = 0; UI.refresh(); UI.refreshTool(); }));
+    bar.querySelectorAll('[data-act=activeProv]').forEach((s) => (s.onchange = () => { T().activeProv = +s.value; UI.refresh(); }));
+    $('#stage').dataset.tool = T().cur;
+  };
+
+  // ---------- 右侧面板 ----------
+  UI.refresh = () => {
+    document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === UI.tab));
+    $('#mapName').value = App.S.meta.name || '';
+    const p = $('#tabBody');
+    p.innerHTML = UI['tab_' + UI.tab]();
+    bind(p);
+    UI.showSelection();
+    UI.status();
+  };
+
+  const field = (label, html) => `<div class="field"><label>${label}</label>${html}</div>`;
+  const cultureSel = (v, act) => `<select data-act="${act}">${App.CULTURES.map((c) => `<option value="${c.id}" ${c.id === v ? 'selected' : ''}>${c.name}</option>`).join('')}</select>`;
+
+  UI.tab_nations = () => {
+    const S = App.S, an = App.nation(T().activeNation);
+    const counts = new Map(); for (let c = 0; c < App.N; c++) { const o = S.owner[c]; if (o) counts.set(o, (counts.get(o) || 0) + 1); }
+    let h = `<div class="row"><button class="btn pri" data-act="addNation">＋ 新建国家</button><select data-act="newCulture" title="新国家的文明">${App.CULTURES.map((c) => `<option value="${c.id}" ${c.id === UI.newCulture ? 'selected' : ''}>${c.name}</option>`).join('')}</select></div>`;
+    h += '<ul class="list">' + S.nations.map((n) => `<li class="${n.id === T().activeNation ? 'on' : ''}" data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name)}</span><small>${App.CULTURES.find((c) => c.id === n.culture)?.name || ''} · ${counts.get(n.id) || 0}格</small></li>`).join('') + '</ul>';
+    if (!S.nations.length) h += '<p class="muted">还没有国家。新建一个，然后用左侧「国家」工具在地图上涂色。</p>';
+    if (an) {
+      const g = App.R.nationLabelGeom(an);
+      h += `<div class="card"><h4>编辑：${U.esc(an.name)}</h4>
+        ${field('国名', `<div class="row"><input type="text" data-n="name" value="${U.esc(an.name)}"><button class="btn" data-act="rndName" title="按文明随机">🎲</button></div>`)}
+        ${field('颜色', `<input type="color" data-n="color" value="${an.color}">`)}
+        ${field('文明', cultureSel(an.culture, 'nCulture'))}
+        ${field('国名字号', `<input type="range" min="6" max="160" value="${Math.round(g?.size || 30)}" data-lbl="size">`)}
+        ${field('国名角度', `<input type="range" min="-90" max="90" value="${Math.round(((g?.ang || 0) * 180) / Math.PI)}" data-lbl="angle">`)}
+        <div class="row wrap"><button class="btn" data-act="lblAuto">国名位置自动</button><button class="btn" data-act="rndAll">🎲 全部重命名（国/省/城）</button></div>
+        <div class="row wrap"><label class="inline">分成 <input type="number" min="1" max="40" value="${UI.provK || 5}" data-act="provK" style="width:52px"> 个行政区</label><button class="btn" data-act="autoProv">自动划分</button></div>
+        <div class="row wrap"><button class="btn" data-act="autoCity">自动生成城市</button><button class="btn danger" data-act="delNation">删除国家</button></div></div>`;
+    }
+    h += `<div class="row wrap"><button class="btn" data-act="recolor">相邻国家自动配色</button></div>`;
+    return h;
+  };
+  UI.tab_provs = () => {
+    const S = App.S, an = App.nation(T().activeNation);
+    if (!an) return '<p class="muted">先在「国家」页选择一个国家。</p>' + `<ul class="list">${S.nations.map((n) => `<li data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name)}</span></li>`).join('')}</ul>`;
+    const ps = S.provinces.filter((p) => p.nation === an.id);
+    let h = `<div class="row"><b style="color:${an.color}">■</b>&nbsp;${U.esc(an.name)} 的行政区</div><div class="row"><button class="btn pri" data-act="addProv">＋ 新建行政区</button></div>`;
+    h += '<ul class="list">' + ps.map((p) => `<li class="${p.id === T().activeProv ? 'on' : ''}" data-prov="${p.id}"><span>${U.esc(p.name)}</span></li>`).join('') + '</ul>';
+    if (!ps.length) h += '<p class="muted">新建行政区后，选「行政区」工具在本国领土内涂抹；也可以回到国家页一键自动划分。</p>';
+    const ap = App.province(T().activeProv);
+    if (ap && ap.nation === an.id) {
+      h += `<div class="card"><h4>编辑行政区</h4>${field('名称', `<div class="row"><input type="text" data-p="name" value="${U.esc(ap.name)}"><button class="btn" data-act="rndProv">🎲</button></div>`)}
+      <div class="row wrap"><button class="btn" data-act="provLblAuto">名称位置自动</button><button class="btn danger" data-act="delProv">删除行政区</button></div></div>`;
+    }
+    return h;
+  };
+  UI.tab_layers = () => {
+    const m = App.S.meta, ref = m.ref;
+    const ck = (k, n) => `<label class="ck"><input type="checkbox" data-meta="${k}" ${m[k] ? 'checked' : ''}> ${n}</label>`;
+    const fonts = ['Noto Serif SC', 'Ma Shan Zheng', 'ZCOOL XiaoWei', 'Long Cang', 'LXGW WenKai TC', 'Noto Sans SC'];
+    const lfonts = ['IM Fell English', 'Cinzel', 'Almendra', 'EB Garamond', 'MedievalSharp'];
+    let h = `<div class="card"><h4>显示</h4>${ck('showIcons', '山脉/森林图标')}${ck('showGrid', '经纬网格')}${ck('showProvLabels', '行政区名')}${ck('showCityLabels', '城市名')}${ck('showArmies', '军队与箭头')}</div>
+    <div class="card"><h4>风格</h4>${field('中文字体', `<select data-meta-s="labelFont">${fonts.map((f) => `<option ${f === m.labelFont ? 'selected' : ''}>${f}</option>`).join('')}</select>`)}
+    ${field('西文字体', `<select data-meta-s="latinFont">${lfonts.map((f) => `<option ${f === m.latinFont ? 'selected' : ''}>${f}</option>`).join('')}</select>`)}
+    ${field('海洋颜色', `<input type="color" data-meta-s="ocean" value="${m.ocean}">`)}</div>
+    <div class="card"><h4>参考图（描图用）</h4><p class="muted">导入你自己的地图截图，半透明叠在上面照着画。</p><div class="row"><button class="btn" data-act="loadRef">导入图片</button>${ref ? '<button class="btn danger" data-act="delRef">移除</button>' : ''}</div>`;
+    if (ref) h += `${ck2('visible', '显示', ref.visible)}${field('不透明度', `<input type="range" min="0" max="1" step="0.05" value="${ref.opacity}" data-ref="opacity">`)}
+      ${field('缩放', `<input type="range" min="0.2" max="4" step="0.01" value="${(ref.w / App.WW).toFixed(2)}" data-ref="scale">`)}
+      ${field('左右', `<input type="range" min="${-App.WW}" max="${App.WW}" value="${ref.x}" data-ref="x">`)}
+      ${field('上下', `<input type="range" min="${-App.HH}" max="${App.HH}" value="${ref.y}" data-ref="y">`)}
+      <div class="row"><button class="btn" data-act="refFit">铺满地图</button></div>`;
+    return h + '</div>';
+  };
+  const ck2 = (k, n, v) => `<label class="ck"><input type="checkbox" data-refck="${k}" ${v ? 'checked' : ''}> ${n}</label>`;
+  UI.tab_map = () => `<div class="card"><h4>新建 / 生成</h4><div class="row wrap"><button class="btn pri" data-act="newMap">新建或随机生成…</button><button class="btn" data-act="preset">载入「天汉历626年」</button></div></div>
+    <div class="card"><h4>文件</h4><div class="row wrap"><button class="btn" data-act="save">保存为 JSON</button><button class="btn" data-act="open">打开 JSON</button><button class="btn" data-act="png">导出图片</button></div>
+    <p class="muted">地图会自动保存在浏览器里（下次打开自动恢复）。想长期保存或换电脑，请「保存为 JSON」。</p></div>
+    <div class="card"><h4>统计</h4><p>${App.S.nations.length} 个国家 · ${App.S.provinces.length} 个行政区 · ${App.S.cities.length} 座城市 · ${App.S.armies.length} 支军队 · ${App.S.rivers.length} 条河流</p></div>`;
+
+  // ---------- 面板事件 ----------
+  const bind = (p) => {
+    const S = App.S;
+    p.querySelectorAll('[data-nation]').forEach((li) => (li.onclick = () => { T().activeNation = +li.dataset.nation; T().activeProv = 0; UI.refresh(); UI.refreshTool(); }));
+    p.querySelectorAll('[data-prov]').forEach((li) => (li.onclick = () => { T().activeProv = +li.dataset.prov; if (T().cur !== 'prov') T().set('prov'); UI.refresh(); UI.refreshTool(); }));
+    const an = App.nation(T().activeNation), ap = App.province(T().activeProv);
+    p.querySelectorAll('[data-n]').forEach((i) => {
+      i.onfocus = () => App.pushUndo();
+      i.oninput = () => { an[i.dataset.n] = i.value; if (i.dataset.n === 'color') App.Geo.dirtyPol = true; App.R.request(); };
+      i.onchange = () => { App.changed({ ui: true }); UI.refreshTool(); };
+    });
+    p.querySelectorAll('[data-p]').forEach((i) => { i.onfocus = () => App.pushUndo(); i.oninput = () => { ap[i.dataset.p] = i.value; App.R.request(); }; i.onchange = () => App.changed({ ui: true }); });
+    p.querySelectorAll('[data-lbl]').forEach((i) => (i.oninput = () => {
+      const g = App.R.nationLabelGeom(an); an.label = { x: g.x, y: g.y, angle: g.ang, size: g.size, ...(an.label || {}) };
+      if (i.dataset.lbl === 'size') an.label.size = +i.value; else an.label.angle = (+i.value * Math.PI) / 180;
+      App.R.request(); App.autosave();
+    }));
+    p.querySelectorAll('[data-meta]').forEach((i) => (i.onchange = () => { S.meta[i.dataset.meta] = i.checked; App.R.request(); App.autosave(); }));
+    p.querySelectorAll('[data-meta-s]').forEach((i) => (i.oninput = () => { S.meta[i.dataset.metaS] = i.value; loadFont(i.value); App.R.request(); App.autosave(); }));
+    p.querySelectorAll('[data-ref]').forEach((i) => (i.oninput = () => {
+      const r = S.meta.ref, k = i.dataset.ref, v = +i.value;
+      if (k === 'scale') { const cxm = r.x + r.w / 2, cym = r.y + r.h / 2; r.w = App.WW * v; r.h = r.w / (r.ar || r.w / r.h); r.x = cxm - r.w / 2; r.y = cym - r.h / 2; } else r[k] = v;
+      App.R.request(); App.autosave();
+    }));
+    p.querySelectorAll('[data-refck]').forEach((i) => (i.onchange = () => { S.meta.ref[i.dataset.refck] = i.checked; App.R.request(); }));
+    const act = (name, fn) => p.querySelectorAll(`[data-act=${name}]`).forEach((b) => (b.tagName === 'SELECT' || b.tagName === 'INPUT' ? (b.onchange = () => fn(b)) : (b.onclick = () => fn(b))));
+    act('newCulture', (b) => (UI.newCulture = b.value));
+    act('addNation', () => { App.pushUndo(); const n = App.Ops.addNation({ culture: UI.newCulture || 'huaxia' }); T().activeNation = n.id; T().activeProv = 0; if (!['nation', 'army', 'arrow'].includes(T().cur)) T().set('nation'); App.changed({ ui: true }); UI.refreshTool(); });
+    act('rndName', () => { App.pushUndo(); an.name = App.Names.nation(an.culture); App.changed({ ui: true }); UI.refreshTool(); });
+    act('nCulture', (b) => { App.pushUndo(); an.culture = b.value; App.changed({ ui: true }); });
+    act('lblAuto', () => { App.pushUndo(); an.label = null; App.changed({ ui: true }); });
+    act('rndAll', () => { App.pushUndo(); App.Ops.renameAll(an.id); App.changed({ ui: true }); UI.refreshTool(); });
+    act('provK', (b) => (UI.provK = +b.value));
+    act('autoProv', () => { App.pushUndo(['prov']); App.Ops.autoProvinces(an.id, UI.provK || 5); App.changed({ pol: true, ui: true }); });
+    act('autoCity', () => { App.pushUndo(); App.Ops.autoCities(an.id); App.changed({ ui: true }); });
+    act('delNation', () => { if (!confirm(`删除「${an.name}」？（可撤销）`)) return; App.pushUndo(['owner', 'prov']); App.Ops.deleteNation(an.id); T().activeNation = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
+    act('recolor', () => { App.pushUndo(); App.Ops.recolor(); App.changed({ pol: true, ui: true }); });
+    act('addProv', () => { App.pushUndo(); const pr = App.Ops.addProvince(an.id); T().activeProv = pr.id; T().set('prov'); App.changed({ ui: true }); });
+    act('rndProv', () => { App.pushUndo(); ap.name = App.Names.prov(an.culture); App.changed({ ui: true }); });
+    act('provLblAuto', () => { App.pushUndo(); ap.label = null; App.changed({ ui: true }); });
+    act('delProv', () => { App.pushUndo(['prov']); App.Ops.deleteProvince(ap.id); T().activeProv = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
+    act('loadRef', () => $('#fileImg').click());
+    act('delRef', () => { S.meta.ref = null; App.changed({ ui: true }); });
+    act('refFit', () => { const r = S.meta.ref; r.x = 0; r.y = 0; r.w = App.WW; r.h = App.HH; App.changed({ ui: true }); });
+    act('newMap', UI.newDialog); act('preset', () => UI.loadPreset()); act('save', UI.saveJson); act('open', () => $('#fileJson').click()); act('png', UI.exportDialog);
+  };
+
+  // ---------- 选中对象属性 ----------
+  UI.showSelection = () => {
+    const box = $('#selBox'), o = T().selObj(), sel = T().sel;
+    if (!o) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    const k = sel.kind;
+    const inp = (key, label, type = 'text', extra = '') => field(label, `<input type="${type}" data-o="${key}" value="${U.esc(o[key] ?? '')}" ${extra}>`);
+    const sel_ = (key, label, arr) => field(label, `<select data-o="${key}">${opt(arr, o[key])}</select>`);
+    const nat = (key) => field('所属国家', `<select data-o="${key}" data-numv="1">${App.S.nations.map((n) => `<option value="${n.id}" ${n.id === o[key] ? 'selected' : ''}>${U.esc(n.name)}</option>`).join('')}</select>`);
+    const TITLES = { cities: '城市', armies: '军队', markers: '标记', texts: '文字', rivers: '河流', lines: '线条', arrows: '进军箭头', nationLabel: '国名标签', provLabel: '行政区名' };
+    let h = `<div class="selhead"><b>${TITLES[k]}</b><span><button class="btn small" data-sact="rnd" title="随机名字">🎲</button><button class="btn small danger" data-sact="del">删除</button></span></div>`;
+    if (k === 'cities') h += inp('name', '名称') + sel_('type', '类型', App.CITY_TYPES);
+    if (k === 'armies') h += inp('name', '番号') + inp('strength', '兵力') + sel_('type', '兵种', App.ARMY_TYPES) + nat('nation');
+    if (k === 'markers') h += inp('name', '名称') + sel_('type', '类型', App.MARKER_TYPES);
+    if (k === 'texts') h += field('文字', `<textarea data-o="text" rows="3">${U.esc(o.text)}</textarea>`) + inp('size', '字号', 'range', 'min="6" max="160"') + inp('angle', '角度', 'range', 'min="-90" max="90"') + inp('spacing', '字距', 'range', 'min="0" max="3" step="0.05"') + inp('color', '颜色', 'color') + field('', `<label class="ck"><input type="checkbox" data-ock="box" ${o.box ? 'checked' : ''}> 标题框</label><label class="ck"><input type="checkbox" data-ock="italic" ${o.italic ? 'checked' : ''}> 斜体</label>`);
+    if (k === 'rivers') h += inp('name', '名称') + inp('width', '河口宽度', 'range', 'min="0.6" max="8" step="0.2"') + '<p class="muted">拖动黄色节点修改形状，双击线段加节点，双击节点删节点。</p>';
+    if (k === 'lines') h += sel_('style', '样式', App.LINE_STYLES) + inp('color', '颜色(可选)', 'color') + '<p class="muted">拖动节点修改，双击增删节点。</p>';
+    if (k === 'arrows') h += nat('nation') + inp('width', '宽度', 'range', 'min="4" max="40"');
+    if (k === 'nationLabel') h += inp('name', '国名') + '<p class="muted">拖动可移动国名；字号与角度在「国家」页调整。</p>';
+    if (k === 'provLabel') h += inp('name', '名称') + field('字号', `<input type="range" min="4" max="60" value="${Math.round(o.label?.size || App.R.labelBoxes.find((b) => b.kind === 'prov' && b.id === o.id)?.size || 14)}" data-plbl="size">`);
+    box.innerHTML = h;
+    box.querySelectorAll('[data-o]').forEach((i) => {
+      i.onfocus = () => App.pushUndo();
+      i.oninput = () => { let v = i.value; if (i.type === 'range' || i.dataset.numv) v = +v; o[i.dataset.o] = v; App.R.request(); };
+      i.onchange = () => { App.changed({}); if (k === 'nationLabel') UI.refresh(); };
+    });
+    box.querySelectorAll('[data-ock]').forEach((i) => (i.onchange = () => { App.pushUndo(); o[i.dataset.ock] = i.checked; App.changed({}); }));
+    box.querySelectorAll('[data-plbl]').forEach((i) => (i.oninput = () => { const b = App.R.labelBoxes.find((b) => b.kind === 'prov' && b.id === o.id); o.label = { x: b?.x, y: b?.y, angle: b?.ang, ...(o.label || {}), size: +i.value }; App.R.request(); App.autosave(); }));
+    box.querySelector('[data-sact=del]').onclick = () => {
+      if (k === 'nationLabel') { App.pushUndo(); o.label = null; App.changed({}); return; }
+      if (k === 'provLabel') { App.pushUndo(); o.name = ''; T().select(null); App.changed({}); return; }
+      T().deleteSel();
+    };
+    box.querySelector('[data-sact=rnd]').onclick = () => {
+      App.pushUndo();
+      const c = App.Ops.cellAt(o.x ?? 0, o.y ?? 0), nn = App.nation(k === 'nationLabel' ? o.id : k === 'provLabel' ? o.nation : c >= 0 ? App.S.owner[c] : 0);
+      const cul = nn ? nn.culture : 'huaxia';
+      if (k === 'nationLabel') o.name = App.Names.nation(cul); else if (k === 'provLabel') o.name = App.Names.prov(cul); else if ('name' in o || k === 'cities') o.name = App.Names.city(cul);
+      App.changed({ ui: true });
+    };
+  };
+  UI.focusField = (key) => { const i = document.querySelector(`#selBox [data-o=${key}]`); if (i) { i.focus(); i.select && i.select(); } };
+
+  // ---------- 对话框 ----------
+  const modal = (html, onBind) => {
+    const m = $('#modal'); m.innerHTML = `<div class="dlg">${html}</div>`; m.hidden = false;
+    m.onclick = (e) => { if (e.target === m) m.hidden = true; };
+    m.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => (m.hidden = true)));
+    onBind && onBind(m);
+  };
+  UI.newDialog = () => modal(`<h3>新建地图</h3>
+    <div class="opts3">
+      <div class="card"><h4>空白画布</h4><p class="muted">从一小块陆地开始，自己画大陆、河流和国家。</p><button class="btn pri" id="nBlank">创建空白地图</button></div>
+      <div class="card"><h4>随机世界</h4>
+        ${field('国家数量', '<input type="number" id="gN" value="14" min="2" max="60">')}
+        ${field('陆地比例', '<input type="range" id="gL" value="0.42" min="0.2" max="0.7" step="0.02">')}
+        ${field('文明', `<select id="gC"><option value="mixed">混合（东西方）</option><option value="zh">东方诸文明（中文名）</option><option value="latin">西方诸文明（西文名）</option>${App.CULTURES.map((c) => `<option value="${c.id}">仅${c.name}</option>`).join('')}</select>`)}
+        ${field('种子', '<input type="text" id="gS" placeholder="留空随机">')}
+        <button class="btn pri" id="nRand">生成</button></div>
+      <div class="card"><h4>天汉历626年</h4><p class="muted">真实欧亚地理 + 架空势力：汉、西域盟大汗国、东瀛国、云梦国…可在此基础上继续修改。</p><button class="btn pri" id="nPreset">载入预设</button></div>
+    </div><div class="row end"><button class="btn" data-close>取消</button></div>`, (m) => {
+    $('#nBlank', m).onclick = () => { T().sel = null; m.hidden = true; App.Gen.blank(); App.afterBigChange(); App.R.fit(); };
+    $('#nRand', m).onclick = () => { T().sel = null;
+      const s = $('#gS', m).value.trim(); m.hidden = true;
+      UI.busy('正在生成世界…', () => {
+        App.Gen.random({ nations: +$('#gN', m).value || 14, land: +$('#gL', m).value, culture: $('#gC', m).value, seed: s ? (isNaN(+s) ? [...s].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0 : +s) : undefined });
+        T().activeNation = 0; T().activeProv = 0; App.afterBigChange(); App.R.fit();
+      });
+    };
+    $('#nPreset', m).onclick = () => { m.hidden = true; UI.loadPreset(); };
+  });
+  UI.loadPreset = () => { T().sel = null;
+    UI.busy('正在载入真实地理数据…', async () => {
+      try { await App.Preset.tianhan(); T().activeNation = 0; App.afterBigChange(); App.R.fit(); } catch (e) { console.error(e); UI.toast('载入失败：' + e.message); }
+    });
+  };
+  UI.busy = (msg, fn) => {
+    const b = $('#busy'); b.textContent = msg; b.hidden = false;
+    setTimeout(async () => { try { await fn(); } finally { b.hidden = true; } }, 40);
+  };
+  UI.saveJson = () => {
+    const blob = new Blob([JSON.stringify(App.serialize(true))], { type: 'application/json' });
+    download(blob, (App.S.meta.name || '地图') + '.json');
+  };
+  UI.exportDialog = () => modal(`<h3>导出图片</h3><p class="muted">导出整张地图为 PNG。</p>
+    <div class="row wrap"><button class="btn pri" data-s="1">标准 (2560×1600)</button><button class="btn pri" data-s="2">高清 (5120×3200)</button></div><div class="row end"><button class="btn" data-close>取消</button></div>`, (m) => {
+    m.querySelectorAll('[data-s]').forEach((b) => (b.onclick = () => {
+      m.hidden = true;
+      UI.busy('正在渲染…', () => new Promise((res) => App.R.exportPNG(+b.dataset.s).toBlob((bl) => { download(bl, (App.S.meta.name || '地图') + '.png'); res(); App.R.request(); }, 'image/png')));
+    }));
+  });
+  const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
+  UI.help = () => modal(`<h3>使用说明</h3><div class="help">
+    <p><b>基本流程：</b>①「陆海」画出大陆 →②「地貌」「森林」「河流」丰富地形 →③ 右侧新建国家，用「国家」工具涂色（油漆桶可一键填满）→④ 一键划分行政区 / 生成城市，或自己画 →⑤ 放置军队、进军箭头、战役标记、文字。</p>
+    <p><b>改名：</b>双击城市、国名、文字可直接改名；🎲 按所在国家的文明随机命名。</p>
+    <p><b>快捷键：</b>V 选择 · H 平移 · L 陆海 · T 地貌 · F 森林 · R 河流 · N 国家 · P 行政区 · B 线条 · C 城市 · A 军队 · W 进军 · M 标记 · X 文字 · [ ] 笔刷大小 · 空格+拖动 平移 · Ctrl/⌘+Z 撤销 · Ctrl/⌘+Shift+Z 重做 · Delete 删除</p>
+    <p><b>缩放：</b>滚轮 / 触控板双指捏合；右键或中键拖动也能平移。</p>
+    <p><b>保存：</b>自动保存在浏览器中；「保存」导出 JSON 文件可备份或分享。</p></div>
+    <div class="row end"><button class="btn pri" data-close>好的</button></div>`);
+
+  const loaded = new Set();
+  const loadFont = (f) => {
+    if (loaded.has(f)) return; loaded.add(f);
+    const l = document.createElement('link'); l.rel = 'stylesheet';
+    l.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(f).replace(/%20/g, '+')}:wght@400;700;900&display=swap`;
+    document.head.appendChild(l);
+    setTimeout(() => document.fonts && document.fonts.load(`700 20px "${f}"`, '汉字Ab').then(() => App.R.request()), 300);
+  };
+  UI.loadFont = loadFont;
+})();
