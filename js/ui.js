@@ -5,6 +5,7 @@
   const UI = (App.UI = { tab: 'nations' });
   const opt = (arr, v) => arr.map((a) => `<option value="${a.id}" ${a.id === v ? 'selected' : ''}>${U.esc(a.name)}</option>`).join('');
   const ICON = {
+    color: '<path d="M12 3a9 9 0 100 18c1.2 0 1.6-.9 1.3-1.8-.3-.8.2-1.7 1.1-1.7H17a4 4 0 004-4c0-5-4-10.5-9-10.5z"/><circle cx="7.5" cy="11" r="1.6" fill="#c8584a"/><circle cx="10.5" cy="7" r="1.6" fill="#d8b45a"/><circle cx="15" cy="7" r="1.6" fill="#6f9a6a"/><circle cx="17.5" cy="11" r="1.6" fill="#5b7aa6"/>',
     select: '<path d="M5 3l12 8-6 1 3 6-2 1-3-6-4 4z"/>',
     pan: '<path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3" fill="none" stroke="currentColor" stroke-width="1.8"/>',
     land: '<path d="M3 15c2-5 5-8 9-7s4-4 8-2c1 5-2 10-7 11s-9 2-10-2z"/>',
@@ -20,7 +21,7 @@
     marker: '<path d="M4 4l16 16M20 4L4 20" stroke="currentColor" stroke-width="2.6"/><path d="M4 8l4-4M16 4l4 4" stroke="currentColor" stroke-width="2"/>',
     text: '<path d="M4 5h16v3h-6v12h-4V8H4z"/>',
   };
-  const TOOLS = [['select', '选择', 'V'], ['pan', '平移', 'H'], ['land', '陆海', 'L'], ['terrain', '地貌', 'T'], ['forest', '森林', 'F'], ['river', '河流', 'R'],
+  const TOOLS = [['color', '彩笔', 'G'], ['select', '选择', 'V'], ['pan', '平移', 'H'], ['land', '陆海', 'L'], ['terrain', '地貌', 'T'], ['forest', '森林', 'F'], ['river', '河流', 'R'],
     ['nation', '国家', 'N'], ['prov', '行政区', 'P'], ['line', '线条', 'B'], ['city', '城市', 'C'], ['army', '军队', 'A'], ['arrow', '进军', 'W'], ['marker', '标记', 'M'], ['text', '文字', 'X']];
 
   UI.init = () => {
@@ -76,12 +77,13 @@
   // ---------- 工具选项栏 ----------
   const chips = (key, arr) => `<div class="chips">${arr.map((a) => `<button class="chip ${T().opt[key] === a.id ? 'on' : ''}" data-opt="${key}" data-val="${a.id}">${U.esc(a.name)}</button>`).join('')}</div>`;
   const brush = () => `<label class="rng">笔刷 <input type="range" min="0.5" max="40" step="0.5" value="${T().opt.brush}" data-num="brush"><b>${T().opt.brush}</b></label>`;
-  const nationPick = () => `<label>国家 <select data-act="activeNation"><option value="0">— 选择国家 —</option>${App.S.nations.map((n) => `<option value="${n.id}" ${n.id === T().activeNation ? 'selected' : ''}>${U.esc(n.name)}</option>`).join('')}</select></label>`;
+  const nationPick = () => `<label>国家 <select data-act="activeNation"><option value="0">— 选择国家 —</option>${App.S.nations.map((n) => `<option value="${n.id}" ${n.id === T().activeNation ? "selected" : ""}>${U.esc(n.name) || "（未命名 " + n.color + "）"}</option>`).join('')}</select></label>`;
   UI.refreshTool = () => {
     document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('on', b.dataset.tool === T().cur));
     const o = T().opt; let h = '';
     switch (T().cur) {
-      case 'select': h = '<span class="hint">点击选中对象，拖动移动；双击折线可增删节点；空白处拖动平移；Delete 删除</span>'; break;
+      case 'color': h = UI.colorBar() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush() + `<label class="ck"><input type="checkbox" data-mk="1" ${o.makeLand ? 'checked' : ''}> 涂到海里自动变陆地</label>`; break;
+      case 'select': h ='<span class="hint">点击选中对象，拖动移动；双击折线可增删节点；空白处拖动平移；Delete 删除</span>'; break;
       case 'pan': h = '<span class="hint">拖动平移，滚轮/双指缩放</span>'; break;
       case 'land': h = chips('land', [{ id: 'land', name: '画陆地' }, { id: 'ocean', name: '画海洋' }, { id: 'lake', name: '画湖泊' }]) + brush(); break;
       case 'terrain': h = chips('terrain', App.TERRAINS) + brush(); break;
@@ -102,6 +104,9 @@
       o[b.dataset.opt] = v; UI.refreshTool(); App.R.request();
     }));
     bar.querySelectorAll('[data-num]').forEach((i) => (i.oninput = () => { o[i.dataset.num] = +i.value; i.nextElementSibling.textContent = i.value; App.R.request(); }));
+    bar.querySelectorAll('[data-sw]').forEach((b) => (b.onclick = () => { o.color = b.dataset.sw; o.erase = false; UI.refreshTool(); }));
+    bar.querySelectorAll('[data-cpick]').forEach((i) => (i.oninput = () => { o.color = i.value; o.erase = false; }));
+    bar.querySelectorAll('[data-mk]').forEach((i) => (i.onchange = () => (o.makeLand = i.checked)));
     bar.querySelectorAll('[data-str]').forEach((i) => (i.oninput = () => (o[i.dataset.str] = i.value)));
     bar.querySelectorAll('[data-act=activeNation]').forEach((s) => (s.onchange = () => { T().activeNation = +s.value; T().activeProv = 0; UI.refresh(); UI.refreshTool(); }));
     bar.querySelectorAll('[data-act=activeProv]').forEach((s) => (s.onchange = () => { T().activeProv = +s.value; UI.refresh(); }));
@@ -127,10 +132,10 @@
     const S = App.S, an = App.nation(T().activeNation);
     const counts = new Map(); for (let c = 0; c < App.N; c++) { const o = S.owner[c]; if (o) counts.set(o, (counts.get(o) || 0) + 1); }
     let h = `<div class="row"><button class="btn pri" data-act="addNation">＋ 新建国家</button><select data-act="newCulture" title="新国家的文明">${App.CULTURES.map((c) => `<option value="${c.id}" ${c.id === UI.newCulture ? 'selected' : ''}>${c.name}</option>`).join('')}</select></div>`;
-    h += '<ul class="list">' + S.nations.map((n) => `<li class="${n.id === T().activeNation ? 'on' : ''}" data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name)}</span><small>${App.CULTURES.find((c) => c.id === n.culture)?.name || ''} · ${counts.get(n.id) || 0}格</small></li>`).join('') + '</ul>';
+    h += '<ul class="list">' + S.nations.map((n) => `<li class="${n.id === T().activeNation ? 'on' : ''}" data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name) || "（未命名）"}</span><small>${App.CULTURES.find((c) => c.id === n.culture)?.name || ''} · ${counts.get(n.id) || 0}格</small></li>`).join('') + '</ul>';
     if (!S.nations.length) h += '<p class="muted">还没有国家。新建一个，然后用左侧「国家」工具在地图上涂色。</p>';
     if (an) {
-      h += `<div class="card"><h4>编辑：${U.esc(an.name)}</h4>
+      h += `<div class="card"><h4>编辑：${U.esc(an.name) || "未命名区域"}</h4>
         ${field('国名', `<div class="row"><input type="text" data-n="name" value="${U.esc(an.name)}"><button class="btn" data-act="rndName" title="按文明随机">🎲</button></div>`)}
         ${field('颜色', `<input type="color" data-n="color" value="${an.color}">`)}
         ${field('文明', cultureSel(an.culture, 'nCulture'))}
@@ -188,7 +193,8 @@
     return h + '</div>';
   };
   const ck2 = (k, n, v) => `<label class="ck"><input type="checkbox" data-refck="${k}" ${v ? 'checked' : ''}> ${n}</label>`;
-  UI.tab_map = () => `<div class="card"><h4>新建 / 生成</h4><div class="row wrap"><button class="btn pri" data-act="newMap">新建或随机生成…</button><button class="btn" data-act="preset">载入「天汉历626年」</button></div></div>
+  UI.tab_map = () => `<div class="card"><h4>新建 / 生成</h4><div class="row wrap"><button class="btn pri" data-act="newMap">新建或随机生成…</button><button class="btn" data-act="preset">载入示例「天汉历626年」</button></div></div>
+    <div class="card"><h4>旧存档</h4><p class="muted">之前版本自动保存的地图还在浏览器里，需要时可以找回。</p><button class="btn" data-act="oldSave">载入上一版本的存档</button></div>
     <div class="card"><h4>文件</h4><div class="row wrap"><button class="btn" data-act="save">保存为 JSON</button><button class="btn" data-act="open">打开 JSON</button><button class="btn" data-act="png">导出图片</button></div>
     <p class="muted">地图会自动保存在浏览器里（下次打开自动恢复）。想长期保存或换电脑，请「保存为 JSON」。</p></div>
     <div class="card"><h4>统计</h4><p>${App.S.nations.length} 个国家 · ${App.S.provinces.length} 个行政区 · ${App.S.cities.length} 座城市 · ${App.S.armies.length} 支军队 · ${App.S.rivers.length} 条河流</p></div>`;
@@ -236,6 +242,7 @@
     act('loadRef', () => $('#fileImg').click());
     act('delRef', () => { S.meta.ref = null; App.changed({ ui: true }); });
     act('refFit', () => { const r = S.meta.ref; r.x = 0; r.y = 0; r.w = App.WW; r.h = App.HH; App.changed({ ui: true }); });
+    act('oldSave', async () => { const s = await App.DB.get('autosave'); if (!s) { UI.toast('没有找到旧存档'); return; } if (!confirm('用旧存档替换当前地图？（当前地图会被覆盖，建议先保存 JSON）')) return; App.deserialize(JSON.parse(s)); App.afterBigChange(); App.R.fit(); UI.toast('已载入旧存档'); });
     act('newMap', UI.newDialog); act('preset', () => UI.loadPreset()); act('save', UI.saveJson); act('open', () => $('#fileJson').click()); act('png', UI.exportDialog);
   };
 
@@ -289,7 +296,7 @@
   };
   UI.newDialog = () => modal(`<h3>新建地图</h3>
     <div class="opts3">
-      <div class="card"><h4>空白画布</h4><p class="muted">从一小块陆地开始，自己画大陆、河流和国家。</p><button class="btn pri" id="nBlank">创建空白地图</button></div>
+      <div class="card"><h4>空白画布</h4><p class="muted">一整张空白羊皮纸，用「彩笔」直接涂色；需要海洋就用「陆海」工具画。</p><button class="btn pri" id="nBlank">创建空白地图</button></div>
       <div class="card"><h4>随机世界</h4>
         ${field('国家数量', '<input type="number" id="gN" value="14" min="2" max="60">')}
         ${field('陆地比例', '<input type="range" id="gL" value="0.42" min="0.2" max="0.7" step="0.02">')}
@@ -330,7 +337,7 @@
   });
   const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
   UI.help = () => modal(`<h3>使用说明</h3><div class="help">
-    <p><b>基本流程：</b>①「陆海」画出大陆 →②「地貌」「森林」「河流」丰富地形 →③ 右侧新建国家，用「国家」工具涂色（油漆桶可一键填满）→④ 一键划分行政区 / 生成城市，或自己画 →⑤ 放置军队、进军箭头、战役标记、文字。</p>
+    <p><b>最快上手：</b>选「彩笔」（G），挑颜色直接涂，同色区域自动成为一块势力并画出边界；之后可在「国家」页给它起名。<br><b>完整流程：</b>①「陆海」画出海洋和大陆 →②「地貌」「森林」「河流」丰富地形 →③ 右侧新建国家，用「国家」工具涂色（油漆桶可一键填满）→④ 一键划分行政区 / 生成城市，或自己画 →⑤ 放置军队、进军箭头、战役标记、文字。</p>
     <p><b>改名：</b>双击城市、国名、文字可直接改名；🎲 按所在国家的文明随机命名。</p>
     <p><b>快捷键：</b>V 选择 · H 平移 · L 陆海 · T 地貌 · F 森林 · R 河流 · N 国家 · P 行政区 · B 线条 · C 城市 · A 军队 · W 进军 · M 标记 · X 文字 · [ ] 笔刷大小 · 空格+拖动 平移 · Ctrl/⌘+Z 撤销 · Ctrl/⌘+Shift+Z 重做 · Delete 删除</p>
     <p><b>缩放：</b>滚轮 / 触控板双指捏合；右键或中键拖动也能平移。</p>
@@ -373,5 +380,17 @@
       UI.syncLv(); App.R.request(); App.autosave(); if (UI.tab === 'layers') UI.refresh();
     };
     UI.syncLv();
+  };
+})();
+
+// ---- 彩色画笔色板 ----
+(() => {
+  const UI = App.UI;
+  UI.SWATCHES = ['#c8584a', '#d9894f', '#d8b45a', '#b9a46a', '#9fae5c', '#6f9a6a', '#5f8f95', '#5b7aa6', '#7d6aa8', '#a9688a', '#b56f5e', '#a07a5a',
+    '#e0a3a0', '#e6c08e', '#c9c98a', '#a9c9a0', '#9cc4c9', '#a8b6d8', '#c7aed8', '#8a8a8a'];
+  UI.colorBar = () => {
+    const cur = (App.Tools.opt.color || '').toLowerCase();
+    const used = new Set(App.S.nations.map((n) => n.color.toLowerCase()));
+    return `<div class="swatches">${UI.SWATCHES.map((c) => `<button class="sw ${c === cur ? 'on' : ''} ${used.has(c) ? 'used' : ''}" data-sw="${c}" style="background:${c}" title="${c}"></button>`).join('')}<label class="cpick" title="自定义颜色"><input type="color" data-cpick="1" value="${cur || '#c8584a'}"></label></div>`;
   };
 })();
