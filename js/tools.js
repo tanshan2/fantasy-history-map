@@ -4,7 +4,7 @@
   const T = (App.Tools = {
     cur: 'select', activeNation: 0, activeProv: 0, sel: null, mouse: null,
     opt: { brush: 5, land: 'land', terrain: 5, forest: 1, fill: false, erase: false, cityType: 'medium', armyType: 'infantry', strength: '1万',
-      lineStyle: 'border', markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
+      lineStyle: 'border', provLevel: 1, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
   });
   const BRUSH = ['land', 'terrain', 'forest', 'nation', 'prov'];
   const DRAWLINE = ['river', 'line', 'arrow'];
@@ -56,7 +56,7 @@
     if (so && so.pts) { for (let i = 0; i < so.pts.length; i++) if (U.dist(wx, wy, so.pts[i][0], so.pts[i][1]) < tol) return { ...T.sel, vertex: i }; }
     for (let i = S.texts.length - 1; i >= 0; i--) { const t = S.texts[i]; if (inBox(wx, wy, { x: t.x, y: t.y, ang: ((t.angle || 0) * Math.PI) / 180, halfW: (t._w || 40) / 2 + 6, halfH: (t._h || 20) / 2 + 6 })) return { kind: 'texts', id: t.id }; }
     if (S.meta.showArmies) for (let i = S.armies.length - 1; i >= 0; i--) { const a = S.armies[i]; if (Math.abs(wx - a.x) < u * 2.1 && Math.abs(wy - a.y) < u * 1.6) return { kind: 'armies', id: a.id }; }
-    for (let i = S.cities.length - 1; i >= 0; i--) { const c = S.cities[i]; if (U.dist(wx, wy, c.x, c.y) < Math.max(u * 1.3, tol)) return { kind: 'cities', id: c.id }; }
+    for (let i = App.R.cityBoxes.length - 1; i >= 0; i--) { const b = App.R.cityBoxes[i]; if (U.dist(wx, wy, b.x, b.y) < Math.max(b.r, tol)) return { kind: "cities", id: b.id }; }
     for (let i = S.markers.length - 1; i >= 0; i--) { const m = S.markers[i]; if (U.dist(wx, wy, m.x, m.y) < Math.max(u * 1.3, tol)) return { kind: 'markers', id: m.id }; }
     for (const b of App.R.labelBoxes.slice().reverse()) if (b.kind === 'nation' && inBox(wx, wy, b)) return { kind: 'nationLabel', id: b.id };
     for (const b of App.R.labelBoxes.slice().reverse()) if (b.kind === 'prov' && inBox(wx, wy, b)) return { kind: 'provLabel', id: b.id };
@@ -88,16 +88,17 @@
       const c = y * W + x, t = S.terrain[c];
       if (tool === 'land') {
         if (o.land === 'land') { if (t < 2) { S.terrain[c] = 2; ch = true; } }
-        else { const nt = o.land === 'lake' ? 1 : 0; if (t !== nt) { S.terrain[c] = nt; S.forest[c] = 0; S.owner[c] = 0; S.prov[c] = 0; ch = true; } }
+        else { const nt = o.land === 'lake' ? 1 : 0; if (t !== nt) { S.terrain[c] = nt; S.forest[c] = 0; S.owner[c] = 0; App.Ops.clearAllProv(c); ch = true; } }
       } else if (t < 2) continue;
       else if (tool === 'terrain') { if (t !== o.terrain) { S.terrain[c] = o.terrain; ch = true; } }
       else if (tool === 'forest') { if (S.forest[c] !== o.forest) { S.forest[c] = o.forest; ch = true; } }
       else if (tool === 'nation') {
-        if (o.erase) { if (S.owner[c]) { S.owner[c] = 0; S.prov[c] = 0; ch = true; } }
-        else if (nid && S.owner[c] !== nid) { S.owner[c] = nid; S.prov[c] = 0; ch = true; }
+        if (o.erase) { if (S.owner[c]) { S.owner[c] = 0; App.Ops.clearAllProv(c); ch = true; } }
+        else if (nid && S.owner[c] !== nid) { S.owner[c] = nid; App.Ops.clearAllProv(c); ch = true; }
       } else if (tool === 'prov') {
-        if (o.erase) { if (S.prov[c] && S.owner[c] === nid) { S.prov[c] = 0; ch = true; } }
-        else if (prov && S.owner[c] === prov.nation && S.prov[c] !== prov.id) { S.prov[c] = prov.id; ch = true; }
+        const lv = T.opt.provLevel || 1, A = App.provArr(prov ? prov.level || 1 : lv);
+        if (o.erase) { if (App.provArr(lv)[c] && S.owner[c] === nid) { App.Ops.clearProvCell(c, lv); ch = true; } }
+        else if (prov && S.owner[c] === prov.nation && A[c] !== prov.id) { App.Ops.setProvCell(c, prov); ch = true; }
       }
     }
     if (ch) App.changed(tool === 'land' ? { land: true, pol: true } : tool === 'terrain' || tool === 'forest' ? { tint: true } : { pol: true });
@@ -107,13 +108,14 @@
     const nid = T.activeNation, prov = App.province(T.activeProv);
     if (T.cur === 'nation') {
       const o0 = S.owner[c0], target = T.opt.erase ? 0 : nid; if (o0 === target || (!target && !T.opt.erase)) return;
-      App.pushUndo(['owner', 'prov']);
-      App.Ops.flood(c0, (n) => S.terrain[n] >= 2 && S.owner[n] === o0).forEach((c) => { S.owner[c] = target; S.prov[c] = 0; });
+      App.pushUndo(["owner", "prov", "prov2", "prov3"]);
+      App.Ops.flood(c0, (n) => S.terrain[n] >= 2 && S.owner[n] === o0).forEach((c) => { S.owner[c] = target; App.Ops.clearAllProv(c); });
     } else if (T.cur === 'prov') {
-      const o0 = S.owner[c0], p0 = S.prov[c0];
-      const target = T.opt.erase ? 0 : prov && prov.nation === o0 ? prov.id : -1; if (target < 0 || target === p0) return;
-      App.pushUndo(['prov']);
-      App.Ops.flood(c0, (n) => S.owner[n] === o0 && S.prov[n] === p0).forEach((c) => (S.prov[c] = target));
+      const lv = T.opt.erase ? T.opt.provLevel || 1 : prov ? prov.level || 1 : 1, A = App.provArr(lv), o0 = S.owner[c0], p0 = A[c0];
+      if (!T.opt.erase && !(prov && prov.nation === o0)) return; if (!T.opt.erase && p0 === prov.id) return;
+      const P1 = S.prov[c0], P2 = S.prov2[c0], par = lv === 3 ? (n) => S.prov2[n] === P2 : lv === 2 ? (n) => S.prov[n] === P1 : () => true;
+      App.pushUndo(["prov", "prov2", "prov3"]);
+      App.Ops.flood(c0, (n) => S.owner[n] === o0 && A[n] === p0 && (p0 !== 0 || par(n))).forEach((c) => (T.opt.erase ? App.Ops.clearProvCell(c, lv) : App.Ops.setProvCell(c, prov)));
     }
     App.changed({ pol: true });
   };
@@ -156,7 +158,7 @@
       if ((T.cur === 'nation' || T.cur === 'prov') && T.opt.fill) { fill(wx, wy); return; }
       if (T.cur === 'nation' && !T.activeNation && !T.opt.erase) { App.UI.toast('请先在右侧「国家」面板选择或新建一个国家'); return; }
       if (T.cur === 'prov' && !T.activeProv && !T.opt.erase) { App.UI.toast('请先在右侧「行政区」面板选择或新建一个行政区'); return; }
-      App.pushUndo(T.cur === 'land' ? ['terrain', 'forest', 'owner', 'prov'] : T.cur === 'terrain' ? ['terrain'] : T.cur === 'forest' ? ['forest'] : ['owner', 'prov']);
+      App.pushUndo(T.cur === "land" ? ["terrain", "forest", "owner", "prov", "prov2", "prov3"] : T.cur === "terrain" ? ["terrain"] : T.cur === "forest" ? ["forest"] : ["owner", "prov", "prov2", "prov3"]);
       drag = { type: 'brush', wx, wy }; paint(wx, wy); return;
     }
     if (DRAWLINE.includes(T.cur)) {
@@ -188,12 +190,11 @@
     }
     if (drag.type === 'move') {
       const dx = wx - drag.wx, dy = wy - drag.wy; if (!dx && !dy) return;
+      if (drag.hit.kind === "nationLabel" || drag.hit.kind === "provLabel") return;
       if (!drag.pushed) { App.pushUndo(); drag.pushed = true; }
       const h = drag.hit, o = T.selObj(); if (!o) return;
-      if (h.kind === 'nationLabel' || h.kind === 'provLabel') {
-        const g = h.kind === 'nationLabel' ? App.R.nationLabelGeom(o) : App.R.labelBoxes.find((b) => b.kind === 'prov' && b.id === o.id);
-        if (g) o.label = { ...(o.label || {}), x: g.x + dx, y: g.y + dy, angle: o.label?.angle ?? g.ang, size: o.label?.size ?? g.size };
-      } else if (h.vertex != null) { o.pts[h.vertex][0] += dx; o.pts[h.vertex][1] += dy; }
+      if (h.kind === "nationLabel" || h.kind === "provLabel") return; // 名字固定，不可拖动
+      else if (h.vertex != null) { o.pts[h.vertex][0] += dx; o.pts[h.vertex][1] += dy; }
       else if (o.pts) o.pts.forEach((p) => { p[0] += dx; p[1] += dy; });
       else { o.x += dx; o.y += dy; }
       drag.wx = wx; drag.wy = wy; App.R.request();
