@@ -91,6 +91,7 @@
     });
     App.Geo.dirtyPol = true; App.Geo.update();
     S.nations.forEach((n) => App.Ops.autoCities(n.id, r, 0.45));
+    S.nations.forEach((n) => { const cap = S.cities.find((k) => k.type === 'capital' && S.owner[App.Ops.cellAt(k.x, k.y)] === n.id); App.Family.createFamily({ culture: n.culture, nation: n.id, home: cap ? cap.id : 0, color: n.color }, r); });
   };
 
   App.Gen.random = (opts = {}) => {
