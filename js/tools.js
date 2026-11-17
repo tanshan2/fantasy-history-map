@@ -4,7 +4,7 @@
   const T = (App.Tools = {
     cur: 'select', activeNation: 0, activeProv: 0, sel: null, mouse: null,
     opt: { brush: 5, land: 'land', terrain: 5, forest: 1, fill: false, erase: false, cityType: 'medium', armyType: 'infantry', strength: '1万',
-      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
+      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
   });
   const BRUSH = ['color', 'land', 'terrain', 'forest', 'nation', 'prov'];
   // 彩色画笔：同一种颜色 = 同一块势力（没有就自动建一个未命名的）
@@ -104,7 +104,7 @@
         if (o.land === 'land') { if (t < 2) { S.terrain[c] = 2; ch = true; } }
         else { const nt = o.land === 'lake' ? 1 : 0; if (t !== nt) { S.terrain[c] = nt; S.forest[c] = 0; S.owner[c] = 0; App.Ops.clearAllProv(c); ch = true; } }
       } else if (t < 2) continue;
-      else if (tool === 'terrain') { if (t !== o.terrain) { S.terrain[c] = o.terrain; ch = true; } }
+      else if (tool === 'terrain') { if (o.tmode === 'climate') { if (S.climate[c] !== o.climate) { S.climate[c] = o.climate; ch = true; } } else if (t !== o.terrain) { S.terrain[c] = o.terrain; ch = true; } }
       else if (tool === 'forest') { if (S.forest[c] !== o.forest) { S.forest[c] = o.forest; ch = true; } }
       else if (tool === 'nation') {
         if (o.erase) { if (S.owner[c]) { S.owner[c] = 0; App.Ops.clearAllProv(c); ch = true; } }
@@ -173,7 +173,7 @@
       if ((T.cur === 'nation' || T.cur === 'prov' || T.cur === 'color') && T.opt.fill) { fill(wx, wy); App.UI.refresh(); return; }
       if (T.cur === 'nation' && !T.activeNation && !T.opt.erase) { App.UI.toast('请先在右侧「国家」面板选择或新建一个国家'); return; }
       if (T.cur === 'prov' && !T.activeProv && !T.opt.erase) { App.UI.toast('请先在右侧「行政区」面板选择或新建一个行政区'); return; }
-      App.pushUndo(T.cur === "land" || T.cur === "color" ? ["terrain", "forest", "owner", "prov", "prov2", "prov3"] : T.cur === "terrain" ? ["terrain"] : T.cur === "forest" ? ["forest"] : ["owner", "prov", "prov2", "prov3"]);
+      App.pushUndo(T.cur === "land" || T.cur === "color" ? ["terrain", "forest", "owner", "prov", "prov2", "prov3"] : T.cur === "terrain" ? ["terrain", "climate", "forest"] : T.cur === "forest" ? ["forest"] : ["owner", "prov", "prov2", "prov3"]);
       drag = { type: 'brush', wx, wy }; paint(wx, wy); return;
     }
     if (DRAWLINE.includes(T.cur)) {
