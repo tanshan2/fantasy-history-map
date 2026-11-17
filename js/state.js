@@ -1,15 +1,15 @@
 // ===== 地图数据、撤销、存档 =====
-App.OBJ_KEYS = ['nations', 'provinces', 'cities', 'armies', 'rivers', 'lines', 'arrows', 'markers', 'texts'];
-App.ARR_KEYS = ['terrain', 'forest', 'owner', 'prov'];
+App.OBJ_KEYS = ['nations', 'provinces', 'cities', 'armies', 'rivers', 'lines', 'arrows', 'markers', 'texts', 'families', 'people'];
+App.ARR_KEYS = ['terrain', 'forest', 'owner', 'prov', 'prov2', 'prov3'];
 
 App.newState = () => ({
   terrain: new Uint8Array(App.N), forest: new Uint8Array(App.N),
-  owner: new Uint16Array(App.N), prov: new Uint16Array(App.N),
-  nations: [], provinces: [], cities: [], armies: [], rivers: [], lines: [], arrows: [], markers: [], texts: [],
+  owner: new Uint16Array(App.N), prov: new Uint16Array(App.N), prov2: new Uint16Array(App.N), prov3: new Uint16Array(App.N),
+  nations: [], provinces: [], cities: [], armies: [], rivers: [], lines: [], arrows: [], markers: [], texts: [], families: [], people: [],
   meta: {
-    name: '未命名地图', labelFont: 'Noto Serif SC', latinFont: 'IM Fell English',
+    name: '未命名地图', labelFont: 'Noto Serif SC', latinFont: 'Alegreya', style: 'vivid', cityStyle: 'icon', year: 1, lv1: true, lv2: true, lv3: false,
     showIcons: true, showGrid: true, showProvLabels: true, showCityLabels: true, showArmies: true,
-    ocean: '#3e5f8a', ref: null,
+    ocean: '#3a86e0', ref: null,
   },
   nextId: 1,
 });
@@ -68,10 +68,12 @@ App.serialize = (withRef = true) => {
 App.deserialize = (o) => {
   if (!o || o.format !== 'fantasy-history-map') throw new Error('不是本工具的地图文件');
   const s = App.newState();
-  s.nextId = o.nextId; Object.assign(s.meta, o.meta || {});
+  s.nextId = o.nextId; Object.assign(s.meta, o.meta || {}); if (!(o.meta || {}).style) { s.meta.ocean = "#3a86e0"; s.meta.latinFont = "Alegreya"; }
   App.OBJ_KEYS.forEach((k) => (s[k] = o[k] || []));
   s.terrain = unrle(o.terrain, Uint8Array); s.forest = unrle(o.forest, Uint8Array);
   s.owner = unrle(o.owner, Uint16Array); s.prov = unrle(o.prov, Uint16Array);
+  if (o.prov2) s.prov2 = unrle(o.prov2, Uint16Array); if (o.prov3) s.prov3 = unrle(o.prov3, Uint16Array);
+  s.provinces.forEach((p) => (p.level = p.level || 1));
   App.S = s; App.undoStack.length = 0; App.redoStack.length = 0;
 };
 
@@ -94,3 +96,10 @@ App.autosave = () => {
     try { App.DB.set('autosave', JSON.stringify(App.serialize(true))).then(() => App.UI && App.UI.flash('已自动保存')); } catch (e) { console.warn(e); }
   }, 1500);
 };
+
+// ---- 三级行政区 ----
+App.LEVELS = [null, { name: '省', full: '一级（省/州）' }, { name: '道', full: '二级（道/路）' }, { name: '府', full: '三级（府/州）' }];
+App.provArr = (lv) => (lv === 3 ? App.S.prov3 : lv === 2 ? App.S.prov2 : App.S.prov);
+App.provKey = (lv) => (lv === 3 ? 'prov3' : lv === 2 ? 'prov2' : 'prov');
+App.family = (id) => App.S.families.find((f) => f.id === id);
+App.person = (id) => App.S.people.find((p) => p.id === id);
