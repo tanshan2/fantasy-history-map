@@ -73,3 +73,61 @@
     groups: { zh: ['huaxia', 'steppe', 'wa', 'tianzhu', 'persia', 'nanyang'], latin: ['latin', 'greek', 'german', 'slavic', 'norse', 'celtic', 'arabic', 'english'] },
   };
 })();
+
+// ---- 三级行政区命名、人名、家族名 ----
+(() => {
+  const P = (a, r) => a[Math.floor(r() * a.length)];
+  const sp = (s) => s.split(' ');
+  const N = App.Names, base = N.gen;
+  const LV = {
+    huaxia: [null, sp('州 州 省'), sp('道 路 路'), sp('府 州 郡 军')], steppe: [null, sp('部 汗庭'), sp('翼 万户'), sp('千户 百户')],
+    wa: [null, sp('道'), sp('国'), sp('郡')], tianzhu: [null, sp('邦 国'), sp('州'), sp('县 城区')],
+    persia: [null, sp('行省'), sp('总督区 州'), sp('城区 县')], nanyang: [null, sp('州'), sp('部'), sp('岛 村落')],
+  };
+  const LATIN = [null, null, ['County of {X}', '{X} County', 'Duchy of {X}'], ['Barony of {X}', '{X}', '{X} Hundred']];
+  const strip = (s) => s.replace(/(州|省|道|路|府|郡|军|部|翼|万户|千户|百户|国|藩|邦|县|城区|行省|总督区|岛|村落|都护府|汗庭|左部|右部)$/, '');
+  N.prov = (cul, r = Math.random, level = 1) => {
+    const lv = LV[cul];
+    if (lv) {
+      let b = strip(base(cul, 'city', r)); if (!b) b = strip(base(cul, 'city', r));
+      if (cul === 'huaxia' && level === 1 && r() < 0.6) b = Array.from(b)[0];
+      return b + P(lv[level], r);
+    }
+    if (level === 1) return base(cul, 'prov', r);
+    return P(LATIN[level], r).replace('{X}', base(cul, 'city', r));
+  };
+  // 人名
+  const GIVEN = {
+    huaxia: [sp('昂 和 宏 嵩 霆 毅 翊 骞 璋 恪 衡 瑾 渊 玄 彦 晟 歆 允 承 安 德 武 广 秀 谌 禹 弘 琮 曜 朗 祐 恂 慎 维 尚 敬'), sp('婉 昭 蓁 莹 若 兰 芷 嫣 韵 瑶 姝 婧 菀 宁 微 娥 媛 华 柔 婵 绮 漪 蘅 琬 黛 琳')],
+    wa: [sp('正 义 信 长 光 秀 家 康 景 胜 宗 政 隆 元 清 重 忠 利 直 盛'), sp('千 代 花 春 雪 菊 松 竹 梅 绫 熏 静 澄 雅')],
+  };
+  const LGIVEN = {
+    german: [sp('Manfred Friedrich Leopold Leonard Tillmann Otto Konrad Heinrich Albrecht Ludwig Siegfried Wilhelm'), sp('Kristina Emily Joanna Mathilde Adelheid Gisela Hedwig Irmgard Sophia Agnes')],
+    latin: [sp('Marcus Lucius Gaius Titus Quintus Aulus Decimus Sextus Flavius Septimus'), sp('Julia Livia Octavia Claudia Aurelia Cornelia Valeria Flavia')],
+    greek: [sp('Alexios Nikephoros Theodoros Leon Basileios Konstantinos Andronikos'), sp('Theodora Irene Zoe Helena Anna Eudokia Sophia')],
+    slavic: [sp('Vladimir Yaroslav Svyatoslav Mstislav Boris Gleb Igor Oleg Dmitri'), sp('Olga Lyudmila Yaroslava Zlata Milena Vesna Rogneda')],
+    norse: [sp('Ragnar Sigurd Bjorn Ivar Harald Olaf Erik Leif Gunnar'), sp('Astrid Ingrid Sigrid Freydis Gudrun Thyra Ragnhild')],
+    celtic: [sp('Brian Conall Aedan Cormac Fergus Niall Domnall Ewan'), sp('Brigid Aine Deirdre Niamh Morag Eithne Siobhan')],
+    arabic: [sp('Harun Yusuf Umar Hamza Khalid Tariq Idris Salim Rashid'), sp('Aisha Fatima Zainab Layla Maryam Salma Khadija')],
+    english: [sp('Edmund Harold Alfred Edward Richard William Henry Geoffrey Robert'), sp('Edith Matilda Eleanor Margaret Alice Isabel Joan Emma')],
+  };
+  N.given = (cul, female, r = Math.random) => {
+    const g = GIVEN[cul];
+    if (g) { const L = g[female ? 1 : 0]; return cul === 'wa' && female ? P(L, r) + '子' : r() < 0.3 ? P(L, r) : P(L, r) + P(L, r); }
+    const lg = LGIVEN[cul];
+    if (lg) return P(lg[female ? 1 : 0], r);
+    // 其他东方文明：音译式
+    return base(cul, 'city', r).replace(/(城|帐|王庭|牙帐|堡|川|港|埠|补罗|巴德|京|津|宫)$/, '').slice(0, 3);
+  };
+  const SURN = sp('刘 李 王 张 陈 赵 杨 司马 诸葛 慕容 宇文 崔 卢 郑 谢 萧 裴 韦 杜 薛 柳 高 曹 孙 周 吴 袁 独孤 长孙 上官 欧阳 公孙');
+  N.familyBase = (cul, r = Math.random) => {
+    if (cul === 'huaxia') return P(SURN, r);
+    if (App.Names.groups.latin.includes(cul)) return base(cul, 'city', r).replace(/^Al-/, '');
+    return base(cul, 'city', r).replace(/(城|帐|王庭|牙帐|堡|川|港|埠|补罗|巴德|京|津|宫)$/, '').slice(0, 2);
+  };
+  N.familyName = (cul, b) => (App.Names.groups.latin.includes(cul) ? 'House ' + b : b + '氏');
+  N.fullName = (cul, surname, given) => (App.Names.groups.latin.includes(cul) ? given + ' ' + surname : surname + given);
+  N.TRAITS = sp('勇敢 怯懦 暴怒 冷静 仁慈 残忍 贪婪 慷慨 多疑 轻信 野心勃勃 知足 勤奋 懒惰 虔诚 愤世嫉俗 聪慧 愚钝 美貌 丑陋 强壮 体弱 好色 贞洁 狡诈 诚实 口拙 雄辩 傲慢 谦逊 公正 专断 果决 优柔寡断 善战 好学');
+  N.POSITIONS = sp('无 家主 皇帝 国王 太子 宰相 丞相 大将军 将军 都护 刺史 太守 尚书 学士 祭司 商人');
+  N.RELIGIONS = sp('儒教 道教 佛教 祆教 景教 摩尼教 萨满 神道 印度教 伊斯兰教 天主教 东正教 古希腊多神教');
+})();
