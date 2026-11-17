@@ -124,15 +124,15 @@
 
   // ---------- 势力 ----------
   const NATIONS = {
-    han: { name: '汉', color: '#e46a55', culture: 'huaxia', label: { lon: 111, lat: 31.5, size: 72, angle: 0 } },
-    xiyu: { name: '西域盟大汗国', color: '#eaa064', culture: 'steppe', label: { lon: 66, lat: 48, size: 34, angle: -0.25 } },
-    yeda: { name: '嚈哒', color: '#8cc56e', culture: 'steppe' },
-    bosi: { name: '波斯（乌弋）', color: '#bdb3a3', culture: 'persia' },
-    tianzhu: { name: '天竺', color: '#d6ccb9', culture: 'tianzhu' },
-    dongying: { name: '东瀛国（刘）', color: '#f0c75e', culture: 'wa' },
-    linan: { name: '临安盟国（刘）', color: '#eab3a0', culture: 'huaxia' },
-    yunmeng: { name: '云梦国（刘）', color: '#a98bd6', culture: 'nanyang' },
-    liugui: { name: '流鬼国', color: '#86d5cc', culture: 'steppe' },
+    han: { name: '汉', color: '#e67d72', culture: 'huaxia', label: { lon: 111, lat: 31.5, size: 72, angle: 0 } },
+    xiyu: { name: '西域盟大汗国', color: '#f2a766', culture: 'steppe', label: { lon: 66, lat: 48, size: 34, angle: -0.25 } },
+    yeda: { name: '嚈哒', color: '#a2c45f', culture: 'steppe' },
+    bosi: { name: '波斯（乌弋）', color: '#d8c9a8', culture: 'persia' },
+    tianzhu: { name: '天竺', color: '#e8c3cf', culture: 'tianzhu' },
+    dongying: { name: '东瀛国（刘）', color: '#f3cf6e', culture: 'wa' },
+    linan: { name: '临安盟国（刘）', color: '#b9dcc0', culture: 'huaxia' },
+    yunmeng: { name: '云梦国（刘）', color: '#c6a6dc', culture: 'nanyang' },
+    liugui: { name: '流鬼国', color: '#8fc9db', culture: 'steppe' },
   };
   const SEEDS = [
     ['han', '司隶', 108.9, 34.3, 60], ['han', '豫州', 114.2, 33.6, 60], ['han', '冀州', 115.5, 38, 60], ['han', '兖州', 116.3, 35.6, 50], ['han', '青州', 118.6, 36.6, 50],
@@ -253,6 +253,7 @@
       const n = nat[k]; let cnt = 0; for (let c = 0; c < N; c++) if (S.owner[c] === n.id) cnt++;
       App.Ops.autoProvinces(n.id, U.clamp(Math.round(cnt / 1400), 1, 6), U.rng(n.id * 77));
     });
+    ['han', 'xiyu', 'bosi', 'dongying'].forEach((k) => App.Ops.autoProvinces(nat[k].id, 0, U.rng(nat[k].id * 91), { keepL1: true }));
     // 城市
     CITIES.forEach(([name, lo, la, type]) => S.cities.push({ id: App.nid(), x: wx(lo), y: wy(la), type, name }));
     // 标记
@@ -276,6 +277,17 @@
     TX('天竺洋', 80, 6.5, 30, '#1d355a', { halo: 'rgba(200,220,240,.25)' }); TX('黄水洋', 123.2, 36.4, 16, '#1d355a', { halo: 'rgba(200,220,240,.25)' });
     TX('西海', 51, 42.5, 16, '#1d355a', { halo: 'rgba(200,220,240,.25)', spacing: 0.4 }); TX('瀚 海', 104, 58.5, 26, '#5a2a1c'); TX('北海', 110.2, 54.6, 12, '#1d355a', { spacing: 0.3 });
     TX('天汉历626年\n（西元441年）\n汉孝显皇帝 宣宗 刘昂\n昌盛九年', 151.5, 24, 20, '#7a1a12', { spacing: 0, box: true });
+    // 家族
+    S.meta.year = 626; S.meta.showFamilies = true;
+    const cid = (nm) => S.cities.find((k) => k.name === nm)?.id || 0, fr = U.rng(626);
+    const liu = App.Family.createFamily({ culture: 'huaxia', base: '刘', nation: nat.han.id, home: cid('长安'), founded: 1, religion: '儒教', color: '#e67d72' }, fr);
+    const em = App.Family.get(liu.patriarch); em.name = '刘昂'; em.position = '皇帝';
+    App.Family.createFamily({ culture: 'huaxia', base: '司马', nation: nat.han.id, home: cid('洛阳'), color: '#8fc9db' }, fr);
+    App.Family.createFamily({ culture: 'huaxia', base: '崔', nation: nat.han.id, home: cid('邺城'), color: '#c8de98' }, fr);
+    App.Family.createFamily({ culture: 'huaxia', base: '刘', name: '临安刘氏', nation: nat.linan.id, home: cid('临安'), color: '#b9dcc0' }, fr);
+    App.Family.createFamily({ culture: 'huaxia', base: '刘', name: '东瀛刘氏', nation: nat.dongying.id, home: cid('大和'), color: '#f3cf6e' }, fr);
+    App.Family.createFamily({ culture: 'steppe', nation: nat.xiyu.id, home: cid('碎叶'), color: '#f2a766' }, fr);
+    App.Family.createFamily({ culture: 'persia', nation: nat.bosi.id, home: cid('泰西封'), color: '#d8c9a8' }, fr);
     App.undoStack.length = 0; App.redoStack.length = 0;
   };
 })();
