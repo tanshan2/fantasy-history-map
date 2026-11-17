@@ -183,3 +183,46 @@
   O.clearProvCell = (c, lv = 1) => { for (let l = lv; l <= 3; l++) App.provArr(l)[c] = 0; };
   O.clearAllProv = (c) => O.clearProvCell(c, 1);
 })();
+
+// ---- 行政区：补全新涂的地块、一键划分全部 ----
+(() => {
+  const O = App.Ops, W = App.W, H = App.H, N = App.N;
+  // 已有行政区的国家：把新扩张、还没归属的地块并入最近的省/道/府
+  O.fillUnassigned = () => {
+    const S = App.S, P1 = S.prov, P2 = S.prov2, P3 = S.prov3, O_ = S.owner;
+    const has = new Set(S.provinces.map((p) => p.nation));
+    const q = []; let changed = false;
+    for (let c = 0; c < N; c++) if (O_[c] && P1[c] && has.has(O_[c])) q.push(c);
+    for (let h = 0; h < q.length; h++) {
+      const c = q[h], x = c % W, y = (c / W) | 0;
+      for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) {
+        if (n < 0 || P1[n] || O_[n] !== O_[c]) continue;
+        P1[n] = P1[c]; P2[n] = P2[c]; P3[n] = P3[c]; q.push(n); changed = true;
+      }
+    }
+    // 道、府层级里的空洞也补上（同一上级内）
+    for (const [A, Up] of [[P2, P1], [P3, P2]]) {
+      const qq = []; for (let c = 0; c < N; c++) if (A[c]) qq.push(c);
+      for (let h = 0; h < qq.length; h++) {
+        const c = qq[h], x = c % W, y = (c / W) | 0;
+        for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) {
+          if (n < 0 || A[n] || Up[n] !== Up[c] || O_[n] !== O_[c]) continue;
+          A[n] = A[c]; if (A === P2) P3[n] = P3[c]; qq.push(n); changed = true;
+        }
+      }
+    }
+    return changed;
+  };
+  // 一键：给所有还没有行政区的国家自动划分三级
+  O.autoAllProvinces = (all = false, r = Math.random) => {
+    const S = App.S, cnt = new Map();
+    for (let c = 0; c < N; c++) if (S.owner[c]) cnt.set(S.owner[c], (cnt.get(S.owner[c]) || 0) + 1);
+    let k = 0;
+    S.nations.forEach((n) => {
+      if (!all && S.provinces.some((p) => p.nation === n.id)) return;
+      const m = cnt.get(n.id) || 0; if (!m) return;
+      O.autoProvinces(n.id, U.clamp(Math.round(m / 1300), 1, 10), r); k++;
+    });
+    return k;
+  };
+})();
