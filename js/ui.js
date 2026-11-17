@@ -83,7 +83,7 @@
     document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('on', b.dataset.tool === T().cur));
     const o = T().opt; let h = '';
     switch (T().cur) {
-      case 'color': h = UI.colorBar() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush() + `<label class="ck"><input type="checkbox" data-mk="1" ${o.makeLand ? 'checked' : ''}> 涂到海里自动变陆地</label>`; break;
+      case 'color': h = UI.colorBar() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush() + `<label class="ck"><input type="checkbox" data-mk="1" ${o.makeLand ? 'checked' : ''}> 涂到海里自动变陆地</label><button class="btn small" data-autoall="1" title="给还没有行政区的颜色区域自动划分省、道、府">一键划分行政区</button>`; break;
       case 'select': h ='<span class="hint">点击选中对象，拖动移动；双击折线可增删节点；空白处拖动平移；Delete 删除</span>'; break;
       case 'pan': h = '<span class="hint">拖动平移，滚轮/双指缩放</span>'; break;
       case 'land': h = chips('land', [{ id: 'land', name: '画陆地' }, { id: 'ocean', name: '画海洋' }, { id: 'lake', name: '画湖泊' }]) + brush(); break;
@@ -107,6 +107,7 @@
     bar.querySelectorAll('[data-num]').forEach((i) => (i.oninput = () => { o[i.dataset.num] = +i.value; i.nextElementSibling.textContent = i.value; App.R.request(); }));
     bar.querySelectorAll('[data-rebiome]').forEach((b) => (b.onclick = () => { if (!confirm('按气候重新铺设全图的地貌和森林？（山地、丘陵保留，可撤销）')) return; App.pushUndo(['terrain', 'forest']); App.Climate.applyBiomes(App.S); App.changed({ tint: true }); }));
     if (T().cur === 'terrain' && o.tmode === 'climate' && !App.S.meta.showClimate) { App.S.meta.showClimate = true; App.R.request(); }
+    bar.querySelectorAll('[data-autoall]').forEach((b) => (b.onclick = () => { App.pushUndo(['prov', 'prov2', 'prov3']); const k = App.Ops.autoAllProvinces(false); App.changed({ pol: true, ui: true }); UI.toast(k ? '已为 ' + k + ' 个区域划分省、道、府' : '所有区域都已经有行政区了（在「国家」页可以重新划分）'); }));
     bar.querySelectorAll('[data-sw]').forEach((b) => (b.onclick = () => { o.color = b.dataset.sw; o.erase = false; UI.refreshTool(); }));
     bar.querySelectorAll('[data-cpick]').forEach((i) => (i.oninput = () => { o.color = i.value; o.erase = false; }));
     bar.querySelectorAll('[data-mk]').forEach((i) => (i.onchange = () => (o.makeLand = i.checked)));
@@ -149,7 +150,7 @@
         <div class="row wrap"><button class="btn" data-act="autoProv">重新划分全部</button><button class="btn" data-act="autoSub">保留省，只细分道/府</button></div>
         <div class="row wrap"><button class="btn" data-act="autoCity">自动生成城市</button><button class="btn danger" data-act="delNation">删除国家</button></div></div>`;
     }
-    h += `<div class="row wrap"><button class="btn" data-act="recolor">相邻国家自动配色</button><button class="btn" data-act="family">家族 / 族谱…</button></div>`;
+    h += `<div class="row wrap"><button class="btn" data-act="autoAll">一键划分所有国家的行政区</button><button class="btn" data-act="recolor">相邻国家自动配色</button><button class="btn" data-act="family">家族 / 族谱…</button></div>`;
     return h;
   };
   UI.tab_provs = () => {
@@ -235,6 +236,7 @@
     act('provK', (b) => (UI.provK = +b.value));
     act("autoSub", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, 0, Math.random, { keepL1: true }); App.changed({ pol: true, ui: true }); });
     act("family", () => App.Family.show());
+    act('autoAll', () => { const redo = App.S.provinces.length && confirm('已有行政区的国家也重新划分吗？\n确定＝全部重新划分，取消＝只划分还没有行政区的'); App.pushUndo(['prov', 'prov2', 'prov3']); const k = App.Ops.autoAllProvinces(redo); App.changed({ pol: true, ui: true }); UI.toast('已划分 ' + k + ' 个国家'); });
     act("autoProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, UI.provK || 5); App.changed({ pol: true, ui: true }); });
     act('autoCity', () => { App.pushUndo(); App.Ops.autoCities(an.id); App.changed({ ui: true }); });
     act('delNation', () => { if (!confirm(`删除「${an.name}」？（可撤销）`)) return; App.pushUndo(["owner", "prov", "prov2", "prov3"]); App.Ops.deleteNation(an.id); T().activeNation = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
