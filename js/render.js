@@ -8,9 +8,9 @@
   R.STYLES = {
     parchment: { name: '羊皮纸（偏暗做旧）', ocean: '#304a66', seaAlpha: 1, vignette: 'rgba(5,10,20,0.45)', grid: 'rgba(200,215,225,0.12)', aged: true,
       glow: [150, 186, 200], glowD: 8, glowA: 0.85, glowP: 1.6, nationA: 0.78, band: 0.9, paper: 1, tintA: 1,
-      prov: ['rgba(70,45,30,.6)', 'rgba(70,45,30,.5)', 'rgba(70,45,30,.4)'], provW: [1.1, 0.8, 0.6], provDash: [[4, 2.5], [2.5, 2], [1, 1.8]],
+      prov: ['rgba(35,20,10,.85)', 'rgba(35,20,10,.7)', 'rgba(35,20,10,.55)'], provW: [1.6, 1.1, 0.8], provDash: [null, [4, 2.5], [1.2, 2]], provHalo: 'rgba(245,230,200,.45)',
       borderShade: -0.55, borderW: 1.3, coast: '#1b2f45', coastW: 1.7, river: '#3f6f8a',
-      label: (n) => U.rgba(U.shade(n.color, -0.8), 0.9), labelHalo: 'rgba(235,220,185,0.45)', provLabel: null, city: '#2e2218', cityHalo: 'rgba(236,222,190,.85)', ink: false },
+      label: (n) => U.rgba(U.shade(n.color, -0.8), 0.9), labelHalo: 'rgba(240,228,200,0.35)', provLabel: null, city: '#2e2218', cityHalo: 'rgba(236,222,190,.85)', ink: false },
     vivid: { name: '鲜明（游戏地图风）', ocean: '#3a86e0', seaAlpha: 0.75, vignette: 'rgba(10,40,110,0.25)', grid: 'rgba(255,255,255,0.13)',
       glow: [126, 186, 245], glowD: 4, glowA: 0.95, glowP: 0.7, nationA: 0.9, band: 0.35, paper: 0.55, tintA: 0.55,
       prov: ['rgba(120,120,120,.9)', 'rgba(140,140,140,.8)', 'rgba(150,150,150,.6)'], provW: [1.3, 0.95, 0.65], provDash: [null, null, [2, 2.2]],
@@ -85,6 +85,7 @@
     // 行政区界（三级，从细到粗）
     if (G.provPaths) for (let lv = 3; lv >= 1; lv--) {
       if (!S.meta['lv' + lv] || !G.provPaths[lv]) continue;
+      if (lv === 1 && st.provHalo) { c.setLineDash([]); c.strokeStyle = st.provHalo; c.lineWidth = sw(st.provW[0] + 1.6); c.stroke(G.provPaths[1]); }
       const d = st.provDash[lv - 1]; c.setLineDash(d ? d.map(sw) : []);
       c.strokeStyle = st.prov[lv - 1]; c.lineWidth = sw(st.provW[lv - 1]); c.stroke(G.provPaths[lv]);
     }
@@ -125,8 +126,11 @@
     if (S.meta.showArmies) S.armies.forEach((a) => { if (inView(a.x, a.y)) drawArmy(c, a, u); });
     // 标签
     R.labelBoxes = [];
-    drawRegionLabels(c, s, st);
-    if (S.meta.showCityLabels) cities.forEach((ct) => drawCityLabel(c, ct, u, s, st));
+    const cl = S.meta.showCityLabels ? R.layoutCityLabels(c, cities, u, s) : { list: [], boxes: [] };
+    const soft = cl.boxes.concat(R.cityBoxes.map((b) => [b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r]));
+    if (S.meta.showArmies) S.armies.forEach((a) => soft.push([a.x - u * 2.2, a.y - u * 2.6, a.x + u * 2.2, a.y + u * 2.6]));
+    drawRegionLabels(c, s, st, soft);
+    cl.list.forEach((ct) => drawCityLabel(c, ct, u, s, st));
     if (S.meta.showFamilies) (S.families || []).forEach((f) => {
       const ct = S.cities.find((k) => k.id === f.home); if (!ct || !inView(ct.x, ct.y)) return;
       const sz = u * 1.15, x = ct.x + u * 1.2, y = ct.y - R.cityIconSize(ct, u) * 0.9;
@@ -337,46 +341,86 @@
     size = U.clamp(size, minSize, maxSize);
     return { x: info.x, y: info.y, ang, size, lines, cjk, longest };
   };
+  const labelLayout = (c, g, weight, fam) => {
+    c.save(); c.font = fontFor(g.lines[0], g.size, weight, fam);
+    const lh = g.size * 1.12; let maxW = 0;
+    g.lines.forEach((line) => {
+      if (g.cjk) { const n = Array.from(line).length, step = g.size * (n > 2 ? 1.25 : 1.45); maxW = Math.max(maxW, step * (n - 1) + g.size); }
+      else { if ('letterSpacing' in c) c.letterSpacing = g.size * 0.04 + 'px'; maxW = Math.max(maxW, c.measureText(line).width); if ('letterSpacing' in c) c.letterSpacing = '0px'; }
+    });
+    c.restore();
+    return { halfW: maxW / 2 + g.size * 0.15, halfH: (g.lines.length * lh) / 2 };
+  };
   const drawLabel = (c, g, fill, halo, weight, fam) => {
     c.save(); c.translate(g.x, g.y); c.rotate(g.ang); c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round';
     c.font = fontFor(g.lines[0], g.size, weight, fam);
-    const lh = g.size * 1.12; let maxW = 0;
+    const lh = g.size * 1.12;
     g.lines.forEach((line, li) => {
       const ly = (li - (g.lines.length - 1) / 2) * lh;
       if (g.cjk) {
         const chars = Array.from(line), step = g.size * (chars.length > 2 ? 1.25 : 1.45), tot = step * (chars.length - 1);
-        maxW = Math.max(maxW, tot + g.size);
-        chars.forEach((ch, i) => { const cx = -tot / 2 + i * step; if (halo) { c.lineWidth = g.size * 0.14; c.strokeStyle = halo; c.strokeText(ch, cx, ly); } c.fillStyle = fill; c.fillText(ch, cx, ly); });
+        chars.forEach((ch, i) => { const cx = -tot / 2 + i * step; if (halo) { c.lineWidth = g.size * 0.07; c.strokeStyle = halo; c.strokeText(ch, cx, ly); } c.fillStyle = fill; c.fillText(ch, cx, ly); });
       } else {
         if ('letterSpacing' in c) c.letterSpacing = g.size * 0.04 + 'px';
-        maxW = Math.max(maxW, c.measureText(line).width);
-        if (halo) { c.lineWidth = g.size * 0.12; c.strokeStyle = halo; c.strokeText(line, 0, ly); }
+        if (halo) { c.lineWidth = g.size * 0.07; c.strokeStyle = halo; c.strokeText(line, 0, ly); }
         c.fillStyle = fill; c.fillText(line, 0, ly);
         if ('letterSpacing' in c) c.letterSpacing = '0px';
       }
     });
     c.restore();
-    return { halfW: maxW / 2 + g.size * 0.2, halfH: (g.lines.length * lh) / 2 };
   };
+  // 旋转矩形的外接框 & 碰撞
+  const aabb = (x, y, ang, hw, hh, pad = 0) => { const cs = Math.abs(Math.cos(ang)), sn = Math.abs(Math.sin(ang)); const w = hw * cs + hh * sn + pad, h = hw * sn + hh * cs + pad; return [x - w, y - h, x + w, y + h]; };
+  const hits = (a, list) => list.some((b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]);
   R.nationLabelGeom = (n) => { const info = App.Geo.labels.get(n.id); return info ? geomFor(n.name || '', info, 130, 7) : null; };
-  const drawRegionLabels = (c, s, st) => {
-    const S = App.S, G = App.Geo;
-    const PSZ = { 1: [30, 0.62], 2: [20, 0.48], 3: [13, 0.36] };
-    S.provinces.forEach((p) => {
-      const lv = p.level || 1; if (!S.meta.showProvLabels || !S.meta['lv' + lv] || !p.name) return;
-      const info = G.provLabels.get(p.id); if (!info) return;
-      const n = App.nation(p.nation); if (!n) return;
-      const g = geomFor(p.name, info, PSZ[lv][0], 3, PSZ[lv][1]);
-      if (g.size * s < 6.5) return;
-      const fill = st.provLabel || U.rgba(U.shade(n.color, -0.7), 0.75);
-      const b = drawLabel(c, g, fill, null, lv === 1 ? 700 : 500);
-      R.labelBoxes.push({ kind: 'prov', id: p.id, x: g.x, y: g.y, ang: g.ang, ...b, size: g.size });
+
+  // 标签排布：每个名字只放在自己的区域内，依次尝试多个候选位置与缩小字号，避免压住其他名字和城市
+  const drawRegionLabels = (c, s, st, soft) => {
+    const S = App.S, G = App.Geo, placed = [];
+    const place = (o) => {
+      const { name, info, kind, id, weight, fill, halo, maxW, k, maxScr, minScr } = o;
+      const cands = [{ x: info.x, y: info.y, r: info.r }, ...(info.alts || [])];
+      const tryAt = (cd, scale, avoidSoft) => {
+        const g = geomFor(name, { ...info, x: cd.x, y: cd.y, r: Math.min(cd.r, info.r) }, maxW, 2, k * scale);
+        g.size = Math.min(g.size, maxScr / s); if (g.size * s < minScr) return false;
+        const m = labelLayout(c, g, weight), pad = g.size * 0.12, box = aabb(g.x, g.y, g.ang, m.halfW, m.halfH, pad);
+        if (hits(box, placed) || (avoidSoft && hits(box, soft))) return false;
+        drawLabel(c, g, fill, halo, weight); placed.push(box);
+        R.labelBoxes.push({ kind, id, x: g.x, y: g.y, ang: g.ang, ...m, size: g.size });
+        return true;
+      };
+      for (const scale of [1, 0.82, 0.66]) for (const cd of cands) if (tryAt(cd, scale, true)) return;
+      for (const scale of [0.82, 0.6, 0.45]) for (const cd of cands) if (tryAt(cd, scale, false)) return;
+    };
+    S.nations.slice().sort((a, b) => (G.labels.get(b.id)?.n || 0) - (G.labels.get(a.id)?.n || 0)).forEach((n) => {
+      const info = G.labels.get(n.id); if (!info || !n.name) return;
+      place({ name: n.name, info, kind: 'nation', id: n.id, weight: /[一-鿿]/.test(n.name) ? 900 : 800, fill: st.label(n), halo: st.labelHalo, maxW: 130, k: 1, maxScr: 72, minScr: 11 });
     });
-    S.nations.forEach((n) => {
-      const g = R.nationLabelGeom(n); if (!g || !n.name) return;
-      const b = drawLabel(c, g, st.label(n), st.labelHalo, g.cjk ? 900 : 800);
-      R.labelBoxes.push({ kind: 'nation', id: n.id, x: g.x, y: g.y, ang: g.ang, ...b, size: g.size });
+    if (!S.meta.showProvLabels) return;
+    const PSZ = { 1: [30, 0.62, 34, 8], 2: [20, 0.48, 24, 7], 3: [13, 0.36, 17, 6.5] };
+    [1, 2, 3].forEach((lv) => {
+      if (!S.meta['lv' + lv]) return;
+      S.provinces.filter((p) => (p.level || 1) === lv && p.name).map((p) => [p, G.provLabels.get(p.id)]).filter(([, i]) => i).sort((a, b) => b[1].n - a[1].n).forEach(([p, info]) => {
+        const n = App.nation(p.nation); if (!n) return;
+        place({ name: p.name, info, kind: 'prov', id: p.id, weight: lv === 1 ? 700 : 500, fill: st.provLabel || U.rgba(U.shade(n.color, -0.7), 0.75), halo: null, maxW: PSZ[lv][0], k: PSZ[lv][1], maxScr: PSZ[lv][2], minScr: PSZ[lv][3] });
+      });
     });
+  };
+  // 城市名：先算好位置，互相避让（重要的城市优先）
+  const CITY_PRI = { capital: 0, large: 1, fortress: 2, port: 3, medium: 4, pass: 5, small: 6, village: 7 };
+  R.layoutCityLabels = (c, cities, u, s) => {
+    const out = [], boxes = [];
+    cities.slice().sort((a, b) => (CITY_PRI[a.type] ?? 9) - (CITY_PRI[b.type] ?? 9)).forEach((ct) => {
+      if (!ct.name || s < (CITY_MIN[ct.type] ?? 0.5)) return;
+      const size = u * (CITY_FONT[ct.type] || 1.3);
+      c.font = fontFor(ct.name, size, ct.type === 'capital' ? 800 : 600);
+      const w = c.measureText(ct.name).width / 2, icon = App.S.meta.cityStyle === 'icon';
+      const y = icon ? ct.y + u * 0.25 : ct.y - u * (ct.type === 'village' ? 1.5 : 0.8);
+      const box = icon ? [ct.x - w, y, ct.x + w, y + size * 1.1] : [ct.x - w, y - size * 1.1, ct.x + w, y];
+      if (hits(box, boxes)) return;
+      boxes.push(box); out.push(ct);
+    });
+    return { list: out, boxes };
   };
 
   // ---- 自由文字 ----
