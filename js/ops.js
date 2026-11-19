@@ -28,7 +28,8 @@
   };
   O.addProvince = (nid, name, level = 1, parent = 0) => {
     const n = App.nation(nid);
-    const p = { id: App.nid(), nation: nid, level, parent, name: name || App.Names.prov(n ? n.culture : 'huaxia', Math.random, level) };
+    const nm = name || App.Names.provFor(n, level), p = { id: App.nid(), nation: nid, level, parent, name: typeof nm === "object" ? nm.name : nm };
+    if (typeof nm === "object") p.base = nm.base;
     App.S.provinces.push(p); return p;
   };
   O.deleteNation = (id) => {
@@ -84,38 +85,42 @@
     return { k, idx };
   };
 
-  // 自动划分三级行政区：k1 个省；每省按面积分道；每道按面积分府
+  // 自动划分行政区：按所选制度的层级数与“每个上级下辖数量”来分；每个上级至少 2 个下级（地块太小除外）
+  const MINC = [0, 40, 22, 8]; // 每级单位至少占的格数
+  const kidCount = (sys, level, cells, r) => {
+    const [lo, hi] = sys.kids[level] || [3, 8];
+    const cap = Math.floor(cells / MINC[level]); if (cap < 2) return 1;
+    let k = lo + Math.floor(r() * (hi - lo + 1));
+    return Math.max(2, Math.min(k, cap));
+  };
   O.autoProvinces = (nid, k1, r = Math.random, opts = {}) => {
     const S = App.S, n = App.nation(nid); if (!n) return;
-    const cul = n.culture;
+    const sys = App.sysOf(n), maxLv = sys.levels;
     const cells = []; for (let c = 0; c < N; c++) if (S.owner[c] === nid) cells.push(c);
     if (!opts.keepL1) S.provinces.filter((p) => p.nation === nid).forEach((p) => O.deleteProvince(p.id));
+    else S.provinces.filter((p) => p.nation === nid && (p.level || 1) > 1).forEach((p) => O.deleteProvince(p.id));
     if (!cells.length) return;
-    const per2 = opts.per2 || 650, per3 = opts.per3 || 220;
     const sub = (parentCells, level, parent, kk) => {
-      const { k, idx } = O.splitCells(parentCells, kk, r, parent ? parent.id : nid);
-      const ps = []; for (let i = 0; i < k; i++) ps.push(O.addProvince(nid, App.Names.prov(cul, r, level), level, parent ? parent.id : 0));
+      const { k, idx } = O.splitCells(parentCells, kk, r, (parent ? parent.id : nid) * 7 + level);
+      const ps = []; for (let i = 0; i < k; i++) ps.push(O.addProvince(nid, App.Names.provFor(n, level, r), level, parent ? parent.id : 0));
       const groups = ps.map(() => []);
       parentCells.forEach((c, j) => { App.provArr(level)[c] = ps[idx[j]].id; groups[idx[j]].push(c); });
-      if (level < 3) ps.forEach((p, i) => { const g = groups[i]; if (!g.length) return; const kn = level === 1 ? Math.round(g.length / per2) : Math.round(g.length / per3); sub(g, level + 1, p, U.clamp(kn, 1, level === 1 ? 6 : 5)); });
+      if (level < maxLv) ps.forEach((p, i) => { const g = groups[i]; if (g.length) sub(g, level + 1, p, kidCount(sys, level + 1, g.length, r)); });
     };
     if (opts.keepL1) {
-      // 已有一级区：只往下细分
+      cells.forEach((c) => { S.prov2[c] = 0; S.prov3[c] = 0; });
       S.provinces.filter((p) => p.nation === nid && (p.level || 1) === 1).forEach((p) => {
-        S.provinces.filter((q) => q.parent === p.id).forEach((q) => O.deleteProvince(q.id));
-        const g = cells.filter((c) => S.prov[c] === p.id); if (!g.length) return;
-        g.forEach((c) => { S.prov2[c] = 0; S.prov3[c] = 0; });
-        const fake = { id: p.id };
-        const { k, idx } = O.splitCells(g, U.clamp(Math.round(g.length / per2), 1, 6), r, p.id);
-        const ps = []; for (let i = 0; i < k; i++) ps.push(O.addProvince(nid, App.Names.prov(cul, r, 2), 2, p.id));
+        const g = cells.filter((c) => S.prov[c] === p.id); if (!g.length || maxLv < 2) return;
+        const { k, idx } = O.splitCells(g, kidCount(sys, 2, g.length, r), r, p.id * 7 + 2);
+        const ps = []; for (let i = 0; i < k; i++) ps.push(O.addProvince(nid, App.Names.provFor(n, 2, r), 2, p.id));
         const groups = ps.map(() => []);
         g.forEach((c, j) => { S.prov2[c] = ps[idx[j]].id; groups[idx[j]].push(c); });
-        ps.forEach((q, i) => groups[i].length && sub(groups[i], 3, q, U.clamp(Math.round(groups[i].length / per3), 1, 5)));
-        void fake;
+        if (maxLv >= 3) ps.forEach((q, i) => groups[i].length && sub(groups[i], 3, q, kidCount(sys, 3, groups[i].length, r)));
       });
       return;
     }
-    sub(cells, 1, null, k1);
+    if (!k1) k1 = U.clamp(Math.round(cells.length / sys.per), 1, 15);
+    sub(cells, 1, null, Math.min(k1, Math.max(1, Math.floor(cells.length / MINC[1]))));
   };
 
   // 自动生成城市
@@ -147,7 +152,7 @@
   O.renameAll = (nid, r = Math.random) => {
     const S = App.S, n = App.nation(nid); if (!n) return;
     n.name = App.Names.nation(n.culture, r);
-    S.provinces.filter((p) => p.nation === nid).forEach((p) => (p.name = App.Names.prov(n.culture, r, p.level || 1)));
+    S.provinces.filter((p) => p.nation === nid).forEach((p) => Object.assign(p, App.Names.provFor(n, p.level || 1, r)));
     S.cities.forEach((ct) => { if (S.owner[O.cellAt(ct.x, ct.y)] === nid) ct.name = App.Names.city(n.culture, r); });
   };
 
@@ -221,7 +226,7 @@
     S.nations.forEach((n) => {
       if (!all && S.provinces.some((p) => p.nation === n.id)) return;
       const m = cnt.get(n.id) || 0; if (!m) return;
-      O.autoProvinces(n.id, U.clamp(Math.round(m / 1300), 1, 10), r); k++;
+      O.autoProvinces(n.id, 0, r); k++;
     });
     return k;
   };
