@@ -85,9 +85,10 @@
     persia: [null, sp('行省'), sp('总督区 州'), sp('城区 县')], nanyang: [null, sp('州'), sp('部'), sp('岛 村落')],
   };
   const LATIN = [null, null, ['County of {X}', '{X} County', 'Duchy of {X}'], ['Barony of {X}', '{X}', '{X} Hundred']];
-  const strip = (s) => s.replace(/(州|省|道|路|府|郡|军|部|翼|万户|千户|百户|国|藩|邦|县|城区|行省|总督区|岛|村落|都护府|汗庭|左部|右部)$/, '');
-  N.prov = (cul, r = Math.random, level = 1) => {
-    const lv = LV[cul];
+  const strip = (s) => s.replace(/(都护府|总督区|行省|万户|千户|百户|汗庭|城区|村落|左部|右部|布政司|州|省|道|路|府|郡|军|部|翼|国|藩|邦|县|岛)$/, "");
+  N.stripSuffix = strip;
+  N.prov = (cul, r = Math.random, level = 1, sys) => {
+    const lv = cul === "huaxia" && sys && App.ADMIN_SYS[sys] ? App.ADMIN_SYS[sys].lv : LV[cul];
     if (lv) {
       let b = strip(base(cul, 'city', r)); if (!b) b = strip(base(cul, 'city', r));
       if (cul === 'huaxia' && level === 1 && r() < 0.6) b = Array.from(b)[0];
@@ -131,3 +132,4 @@
   N.POSITIONS = sp('无 家主 皇帝 国王 太子 宰相 丞相 大将军 将军 都护 刺史 太守 尚书 学士 祭司 商人');
   N.RELIGIONS = sp('儒教 道教 佛教 祆教 景教 摩尼教 萨满 神道 印度教 伊斯兰教 天主教 东正教 古希腊多神教');
 })();
+
