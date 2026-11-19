@@ -377,24 +377,39 @@
   // 标签排布：每个名字只放在自己的区域内，依次尝试多个候选位置与缩小字号，避免压住其他名字和城市
   const drawRegionLabels = (c, s, st, soft) => {
     const S = App.S, G = App.Geo, placed = [];
+    // 名字的采样点是否落在自己的区域里
+    const inside = (arr, id, g, m) => {
+      if (!arr) return true;
+      const cs = Math.cos(g.ang), sn = Math.sin(g.ang); let ok = 0, tot = 0;
+      for (const fx of [-0.9, -0.45, 0, 0.45, 0.9]) for (const fy of [-0.7, 0, 0.7]) {
+        const lx = fx * m.halfW, ly = fy * m.halfH, cell = App.Ops.cellAt(g.x + lx * cs - ly * sn, g.y + lx * sn + ly * cs);
+        tot++; if (cell >= 0 && arr[cell] === id) ok++;
+      }
+      return ok / tot >= 0.8;
+    };
     const place = (o) => {
-      const { name, info, kind, id, weight, fill, halo, maxW, k, maxScr, minScr } = o;
+      const { name, info, kind, id, weight, fill, halo, maxW, k, maxScr, minScr, arr, must } = o;
       const cands = [{ x: info.x, y: info.y, r: info.r }, ...(info.alts || [])];
-      const tryAt = (cd, scale, avoidSoft) => {
+      const put = (g, m, box) => { drawLabel(c, g, fill, halo, weight); placed.push(box); R.labelBoxes.push({ kind, id, x: g.x, y: g.y, ang: g.ang, ...m, size: g.size }); return true; };
+      const tryAt = (cd, scale, avoidSoft, needInside, minS) => {
         const g = geomFor(name, { ...info, x: cd.x, y: cd.y, r: Math.min(cd.r, info.r) }, maxW, 2, k * scale);
-        g.size = Math.min(g.size, maxScr / s); if (g.size * s < minScr) return false;
+        g.size = Math.min(g.size, maxScr / s); if (g.size * s < minS) return false;
         const m = labelLayout(c, g, weight), pad = g.size * 0.12, box = aabb(g.x, g.y, g.ang, m.halfW, m.halfH, pad);
         if (hits(box, placed) || (avoidSoft && hits(box, soft))) return false;
-        drawLabel(c, g, fill, halo, weight); placed.push(box);
-        R.labelBoxes.push({ kind, id, x: g.x, y: g.y, ang: g.ang, ...m, size: g.size });
-        return true;
+        if (needInside && !inside(arr, id, g, m)) return false;
+        return put(g, m, box);
       };
-      for (const scale of [1, 0.82, 0.66]) for (const cd of cands) if (tryAt(cd, scale, true)) return;
-      for (const scale of [0.82, 0.6, 0.45]) for (const cd of cands) if (tryAt(cd, scale, false)) return;
+      for (const scale of [1, 0.82, 0.66, 0.52]) for (const cd of cands) if (tryAt(cd, scale, true, true, minScr)) return;
+      for (const scale of [0.82, 0.6, 0.45]) for (const cd of cands) if (tryAt(cd, scale, false, true, minScr * 0.85)) return;
+      for (const scale of [0.6, 0.45]) for (const cd of cands) if (tryAt(cd, scale, false, false, minScr * 0.85)) return;
+      if (!must) return;
+      // 国名保底：一定显示，用最小可读字号放在区域中心
+      const g = geomFor(name, info, maxW, 2, k); g.size = Math.max(Math.min(g.size, maxScr / s), 11 / s); g.ang = 0;
+      const m = labelLayout(c, g, weight); put(g, m, aabb(g.x, g.y, 0, m.halfW, m.halfH, g.size * 0.12));
     };
-    S.nations.slice().sort((a, b) => (G.labels.get(b.id)?.n || 0) - (G.labels.get(a.id)?.n || 0)).forEach((n) => {
+    S.nations.slice().sort((a, b) => (G.labels.get(a.id)?.n || 0) - (G.labels.get(b.id)?.n || 0)).forEach((n) => {
       const info = G.labels.get(n.id); if (!info || !n.name) return;
-      place({ name: n.name, info, kind: 'nation', id: n.id, weight: /[一-鿿]/.test(n.name) ? 900 : 800, fill: st.label(n), halo: st.labelHalo, maxW: 130, k: 1, maxScr: 72, minScr: 11 });
+      place({ name: n.name, info, kind: 'nation', id: n.id, weight: /[一-鿿]/.test(n.name) ? 900 : 800, fill: st.label(n), halo: st.labelHalo, maxW: 130, k: 1, maxScr: 72, minScr: 11, arr: S.owner, must: true });
     });
     if (!S.meta.showProvLabels) return;
     const PSZ = { 1: [30, 0.62, 34, 8], 2: [20, 0.48, 24, 7], 3: [13, 0.36, 17, 6.5] };
@@ -402,7 +417,7 @@
       if (!S.meta['lv' + lv]) return;
       S.provinces.filter((p) => (p.level || 1) === lv && p.name).map((p) => [p, G.provLabels.get(p.id)]).filter(([, i]) => i).sort((a, b) => b[1].n - a[1].n).forEach(([p, info]) => {
         const n = App.nation(p.nation); if (!n) return;
-        place({ name: p.name, info, kind: 'prov', id: p.id, weight: lv === 1 ? 700 : 500, fill: st.provLabel || U.rgba(U.shade(n.color, -0.7), 0.75), halo: null, maxW: PSZ[lv][0], k: PSZ[lv][1], maxScr: PSZ[lv][2], minScr: PSZ[lv][3] });
+        place({ name: p.name, info, kind: 'prov', id: p.id, weight: lv === 1 ? 700 : 500, fill: st.provLabel || U.rgba(U.shade(n.color, -0.7), 0.75), halo: null, maxW: PSZ[lv][0], k: PSZ[lv][1], maxScr: PSZ[lv][2], minScr: PSZ[lv][3], arr: App.provArr(lv) });
       });
     });
   };
