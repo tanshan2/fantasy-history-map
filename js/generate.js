@@ -87,7 +87,7 @@
     App.Ops.recolor(r);
     S.nations.forEach((n) => {
       let k = 0; for (let c = 0; c < N; c++) if (S.owner[c] === n.id) k++;
-      App.Ops.autoProvinces(n.id, U.clamp(Math.round(k / 1100), 1, 9), r);
+      App.Ops.autoProvinces(n.id, 0, r);
     });
     App.Geo.dirtyPol = true; App.Geo.update();
     S.nations.forEach((n) => App.Ops.autoCities(n.id, r, 0.45));
