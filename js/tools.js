@@ -4,7 +4,7 @@
   const T = (App.Tools = {
     cur: 'select', activeNation: 0, activeProv: 0, sel: null, mouse: null,
     opt: { brush: 5, land: 'land', terrain: 5, forest: 1, fill: false, erase: false, cityType: 'medium', armyType: 'infantry', strength: '1万',
-      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
+      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, lockOther: false, lockRiver: false, lockMtn: false, lockSea: false, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
   });
   const BRUSH = ['color', 'land', 'terrain', 'forest', 'nation', 'prov'];
   // 彩色画笔：同一种颜色 = 同一块势力（没有就自动建一个未命名的）
@@ -29,6 +29,8 @@
     cv.addEventListener('dblclick', dbl);
     window.addEventListener('keydown', key);
     window.addEventListener('keyup', (e) => { if (e.code === 'Space') spaceDown = false; });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Alt') { T.altDown = true; App.R.request(); } });
+    window.addEventListener('keyup', (e) => { if (e.key === 'Alt') { T.altDown = false; App.R.request(); } });
   };
   T.set = (id) => { T.cur = id; drag = null; if (id !== 'select') T.select(null); App.UI.refreshTool(); App.R.request(); };
   T.select = (sel) => { T.sel = sel; App.UI.showSelection(); App.R.request(); };
@@ -84,16 +86,77 @@
     T.select(null); App.changed({ ui: true });
   };
 
+  // ---------- 智能笔刷：锁定他国 / 以河为界 / 以山为界 / 以海为界 ----------
+  const POL = ['color', 'nation', 'prov'];
+  T.altDown = false;
+  T.locksOn = () => { const o = T.opt; return POL.includes(T.cur) && !T.altDown && !!(o.lockOther || o.lockRiver || o.lockMtn || o.lockSea); };
+  let rMask = null, rKey = '';
+  T.riverMask = () => {
+    const S = App.S, key = S.rivers.length + ':' + S.rivers.reduce((a, r) => a + r.pts.length * 7 + (r.pts[0] ? r.pts[0][0] + r.pts[r.pts.length - 1][1] : 0), 0);
+    if (rMask && key === rKey) return rMask;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const x = cv.getContext('2d');
+    x.strokeStyle = '#000'; x.lineWidth = 1.15; x.lineCap = 'round'; x.lineJoin = 'round';
+    S.rivers.forEach((r) => { const p = U.smooth(r.pts, 4); x.beginPath(); p.forEach(([px, py], i) => (i ? x.lineTo(px / C, py / C) : x.moveTo(px / C, py / C))); x.stroke(); });
+    const d = x.getImageData(0, 0, W, H).data; rMask = new Uint8Array(App.N);
+    for (let i = 0; i < App.N; i++) rMask[i] = d[i * 4 + 3] > 40 ? 1 : 0;
+    rKey = key; return rMask;
+  };
+  // 当前笔刷的“目标”（彩笔颜色对应的国家、选中的国家或行政区）
+  const brushCtx = (create) => {
+    const o = T.opt, prov = App.province(T.activeProv);
+    if (T.cur === 'prov') return { target: prov ? prov.id : 0, lv: prov ? prov.level || 1 : o.provLevel || 1, prov };
+    if (T.cur === 'color') {
+      if (o.erase) return { target: 0 };
+      if (create) return { target: T.colorNation() };
+      const n = App.S.nations.find((k) => k.color.toLowerCase() === (o.color || '').toLowerCase());
+      return { target: n ? n.id : -1 };
+    }
+    return { target: o.erase ? 0 : T.activeNation };
+  };
+  const allowCell = (c, ctx, locks) => {
+    const S = App.S, o = T.opt, t = S.terrain[c];
+    if (t < 2) return T.cur === 'color' && o.makeLand && !o.erase && !(locks && o.lockSea);
+    if (!locks) return true;
+    if (o.lockMtn && (t === 5 || t === 6)) return false;
+    if (o.lockOther && !o.erase) {
+      if (T.cur === 'prov') { const A = App.provArr(ctx.lv); if (A[c] && A[c] !== ctx.target) return false; }
+      else if (S.owner[c] && S.owner[c] !== ctx.target) return false;
+    }
+    return true;
+  };
+  // 笔刷范围内实际会被涂到的格子
+  T.brushCells = (wx, wy, ctx) => {
+    const r = T.opt.brush, cx = wx / C, cy = wy / C, out = [];
+    const inC = (x, y) => x >= 0 && y >= 0 && x < W && y < H && (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r * r;
+    const locks = T.locksOn();
+    if (!locks) {
+      for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(H - 1, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(W - 1, Math.ceil(cx + r)); x++) if (inC(x, y)) out.push(y * W + x);
+      return out;
+    }
+    const x0 = Math.floor(cx), y0 = Math.floor(cy); if (x0 < 0 || y0 < 0 || x0 >= W || y0 >= H) return out;
+    const c0 = y0 * W + x0; if (!allowCell(c0, ctx, true)) return out;
+    const riv = T.opt.lockRiver ? T.riverMask() : null, seen = new Set([c0]), q = [c0];
+    while (q.length) {
+      const c = q.pop(); out.push(c);
+      if (riv && riv[c] && c !== c0) continue; // 河道格涂上，但不越过河
+      const x = c % W, y = (c / W) | 0;
+      for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
+        if (!inC(nx, ny)) continue; const n = ny * W + nx;
+        if (seen.has(n)) continue; seen.add(n);
+        if (allowCell(n, ctx, true)) q.push(n);
+      }
+    }
+    return out;
+  };
+
   // ---------- 刷子 ----------
   const paint = (wx, wy) => {
-    const S = App.S, o = T.opt, r = o.brush, cx = wx / C, cy = wy / C;
-    const x0 = Math.max(0, Math.floor(cx - r)), x1 = Math.min(W - 1, Math.ceil(cx + r)), y0 = Math.max(0, Math.floor(cy - r)), y1 = Math.min(H - 1, Math.ceil(cy + r));
-    const tool = T.cur, nid = T.activeNation, prov = App.province(T.activeProv);
-    let ch = false;
-    let landCh = false; const cnid = tool === 'color' && !o.erase ? T.colorNation() : 0;
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 > r * r) continue;
-      const c = y * W + x, t = S.terrain[c];
+    const S = App.S, o = T.opt, tool = T.cur, nid = T.activeNation, prov = App.province(T.activeProv);
+    const ctx = POL.includes(tool) ? brushCtx(true) : {};
+    const cells = T.brushCells(wx, wy, ctx);
+    let ch = false, landCh = false; const cnid = tool === 'color' && !o.erase ? ctx.target : 0;
+    for (const c of cells) {
+      const t = S.terrain[c];
       if (tool === 'color') {
         if (o.erase) { if (S.owner[c]) { S.owner[c] = 0; App.Ops.clearAllProv(c); ch = true; } continue; }
         if (t < 2) { if (!o.makeLand) continue; S.terrain[c] = 2; landCh = true; }
@@ -118,22 +181,49 @@
     if (landCh) App.changed({ land: true, pol: true });
     else if (ch) App.changed(tool === 'land' ? { land: true, pol: true } : tool === 'terrain' || tool === 'forest' ? { tint: true } : { pol: true });
   };
+  // 油漆桶：同样遵守锁定（可一键填满被河流、山脉围起来的区域）
+  const floodLocked = (c0, same, ctx) => {
+    const locks = T.locksOn(), riv = locks && T.opt.lockRiver ? T.riverMask() : null;
+    const out = [], seen = new Uint8Array(App.N), q = [c0]; seen[c0] = 1;
+    while (q.length) {
+      const c = q.pop(); out.push(c);
+      if (riv && riv[c] && c !== c0) continue;
+      const x = c % W, y = (c / W) | 0;
+      for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) {
+        if (n < 0 || seen[n]) continue; seen[n] = 1;
+        if (same(n) && (!locks || allowCell(n, ctx, true))) q.push(n);
+      }
+    }
+    return out;
+  };
   const fill = (wx, wy) => {
     const S = App.S, c0 = App.Ops.cellAt(wx, wy); if (c0 < 0 || S.terrain[c0] < 2) return;
     const nid = T.activeNation, prov = App.province(T.activeProv);
     if (T.cur === 'nation' || T.cur === 'color') {
-      const o0 = S.owner[c0], target = T.opt.erase ? 0 : T.cur === 'color' ? T.colorNation() : nid; if (o0 === target || (!target && !T.opt.erase)) return;
+      const o0 = S.owner[c0], ctx = brushCtx(true), target = T.opt.erase ? 0 : ctx.target; if (o0 === target || (!target && !T.opt.erase)) return;
+      if (T.locksOn() && T.opt.lockMtn && (S.terrain[c0] === 5 || S.terrain[c0] === 6)) return;
       App.pushUndo(["owner", "prov", "prov2", "prov3"]);
-      App.Ops.flood(c0, (n) => S.terrain[n] >= 2 && S.owner[n] === o0).forEach((c) => { S.owner[c] = target; App.Ops.clearAllProv(c); });
+      floodLocked(c0, (n) => S.terrain[n] >= 2 && S.owner[n] === o0, ctx).forEach((c) => { S.owner[c] = target; App.Ops.clearAllProv(c); });
       if (target) App.Ops.fillUnassigned();
     } else if (T.cur === 'prov') {
       const lv = T.opt.erase ? T.opt.provLevel || 1 : prov ? prov.level || 1 : 1, A = App.provArr(lv), o0 = S.owner[c0], p0 = A[c0];
       if (!T.opt.erase && !(prov && prov.nation === o0)) return; if (!T.opt.erase && p0 === prov.id) return;
       const P1 = S.prov[c0], P2 = S.prov2[c0], par = lv === 3 ? (n) => S.prov2[n] === P2 : lv === 2 ? (n) => S.prov[n] === P1 : () => true;
       App.pushUndo(["prov", "prov2", "prov3"]);
-      App.Ops.flood(c0, (n) => S.owner[n] === o0 && A[n] === p0 && (p0 !== 0 || par(n))).forEach((c) => (T.opt.erase ? App.Ops.clearProvCell(c, lv) : App.Ops.setProvCell(c, prov)));
+      floodLocked(c0, (n) => S.owner[n] === o0 && A[n] === p0 && (p0 !== 0 || par(n)), brushCtx(false)).forEach((c) => (T.opt.erase ? App.Ops.clearProvCell(c, lv) : App.Ops.setProvCell(c, prov)));
     }
     App.changed({ pol: true });
+  };
+  // 预览：开着锁定时，显示这一笔实际会涂到的格子
+  T.drawBrushPreview = (c, s) => {
+    const m = T.mouse; if (!m || !T.locksOn() || T.opt.fill) return;
+    const ctx = brushCtx(false), cells = T.brushCells(m[0], m[1], ctx);
+    let col = '#ffffff';
+    if (T.cur === 'color') col = T.opt.erase ? '#ffffff' : T.opt.color; else if (T.cur === 'nation') col = App.nation(T.activeNation)?.color || '#fff';
+    else if (ctx.prov) col = U.shade(App.nation(ctx.prov.nation)?.color || '#ffffff', 0.4);
+    c.save(); c.globalAlpha = 0.45; c.fillStyle = col;
+    cells.forEach((k) => c.fillRect((k % W) * C, ((k / W) | 0) * C, C, C));
+    c.restore();
   };
 
   // ---------- 放置对象 ----------
@@ -157,6 +247,7 @@
 
   // ---------- 指针事件 ----------
   const down = (e) => {
+    T.altDown = e.altKey;
     canvas.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, pos(e));
     if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: U.dist(a[0], a[1], b[0], b[1]), s: App.R.view.s }; drag = null; return; }
@@ -184,6 +275,7 @@
     if (['city', 'army', 'marker', 'text'].includes(T.cur)) place(wx, wy);
   };
   const move = (e) => {
+    if (T.altDown !== e.altKey) { T.altDown = e.altKey; App.R.request(); }
     const [sx, sy] = pos(e), [wx, wy] = App.R.toWorld(sx, sy);
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, [sx, sy]);
     if (pinch && pointers.size === 2) {
@@ -266,6 +358,7 @@
   // ---------- 覆盖层（光标、预览、选中） ----------
   T.drawOverlay = (c, s) => {
     const m = T.mouse;
+    T.drawBrushPreview(c, s);
     if (m && BRUSH.includes(T.cur) && !((T.cur === 'nation' || T.cur === 'prov' || T.cur === 'color') && T.opt.fill)) {
       c.beginPath(); c.arc(m[0], m[1], T.opt.brush * C, 0, Math.PI * 2);
       c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.5 / s; c.stroke();
