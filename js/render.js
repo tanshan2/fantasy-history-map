@@ -18,6 +18,20 @@
       label: (n) => '#2c2c2c', labelHalo: null, provLabel: 'rgba(45,45,45,.72)', city: '#2b2b2b', cityHalo: 'rgba(255,255,255,.75)', ink: true },
   };
   const ST = () => R.STYLES[App.S.meta.style] || R.STYLES.parchment;
+  let REC = null; R.fontVer = 0;
+  if (document.fonts) document.fonts.addEventListener("loadingdone", () => { R.fontVer++; R.request(); });
+  const cityHitBox = (ct, u) => { if (App.S.meta.cityStyle === "icon") { const sz = R.cityIconSize(ct, u); return { x: ct.x, y: ct.y - sz * 0.45, r: sz * 0.5 }; } return { x: ct.x, y: ct.y, r: u * 0.9 }; };
+  const labelKey = (s) => {
+    // 只做数字运算，不拼接字符串（避免每帧产生大量垃圾导致卡顿）
+    const S = App.S, m = S.meta, sh = (t) => { let h = 0; if (t) for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return h; };
+    let ck = S.cities.length, ak = 0, pk = S.provinces.length, nk = S.nations.length;
+    for (const k of S.cities) ck = (ck * 7 + k.x * 3 + k.y * 5 + sh(k.name) + k.type.length) % 1e9;
+    if (m.showArmies) for (const a of S.armies) ak = (ak * 7 + a.x + a.y * 3) % 1e9;
+    for (const n of S.nations) nk = (nk * 31 + sh(n.name) + sh(n.color)) | 0;
+    for (const p of S.provinces) pk = (pk * 31 + sh(p.name) + p.id) | 0;
+    const f = (m.showProvLabels ? 1 : 0) + (m.lv1 ? 2 : 0) + (m.lv2 ? 4 : 0) + (m.lv3 ? 8 : 0) + (m.cityStyle === "icon" ? 16 : 0) + (m.showCityLabels ? 32 : 0) + (m.showArmies ? 64 : 0);
+    return [App.Geo.polVer, Math.round(Math.log(s) * 30), f, R.fontVer, ck, ak, nk, pk, sh(m.style), sh(m.labelFont), sh(m.latinFont)];
+  };
 
   R.init = (cv) => { canvas = cv; ctx = cv.getContext('2d'); R.resize(); };
   R.resize = () => {
@@ -92,6 +106,7 @@
     c.setLineDash([]);
     S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.strokeStyle = U.shade(n.color, st.borderShade); c.lineWidth = sw(st.borderW); c.stroke(p); });
     c.restore();
+    if (!exp && App.Tools && App.Tools.wetOn) { App.Tools.flushWet(); c.save(); c.imageSmoothingEnabled = false; c.globalAlpha = Math.min(0.85, st.nationA + 0.05); c.drawImage(App.Tools.wet, 0, 0, WW, HH); c.restore(); c.imageSmoothingEnabled = true; }
     // 海岸线
     c.strokeStyle = st.coast; c.lineWidth = sw(st.coastW); c.lineJoin = 'round'; c.stroke(coast);
     // 地形 & 森林图标
@@ -125,12 +140,22 @@
     cities.forEach((ct) => drawCity(c, ct, u, s, st));
     if (S.meta.showArmies) S.armies.forEach((a) => { if (inView(a.x, a.y)) drawArmy(c, a, u); });
     // 标签
-    R.labelBoxes = [];
-    const cl = S.meta.showCityLabels ? R.layoutCityLabels(c, cities, u, s) : { list: [], boxes: [] };
-    const soft = cl.boxes.concat(R.cityBoxes.map((b) => [b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r]));
-    if (S.meta.showArmies) S.armies.forEach((a) => soft.push([a.x - u * 2.2, a.y - u * 2.6, a.x + u * 2.2, a.y + u * 2.6]));
-    drawRegionLabels(c, s, st, soft);
-    cl.list.forEach((ct) => drawCityLabel(c, ct, u, s, st));
+    // 标签：排布结果缓存（内容和缩放级别不变时直接重用，拖动地图不再重算）
+    const lk = labelKey(s);
+    let LC = opt.ctx ? null : R._lc;
+    if (!LC || LC.key.length !== lk.length || LC.key.some((v, i) => v !== lk[i])) {
+      const allC = S.cities.slice().sort((a, b) => a.y - b.y);
+      R.labelBoxes = [];
+      const cl = S.meta.showCityLabels ? R.layoutCityLabels(c, allC, u, s) : { list: [], boxes: [] };
+      const soft = cl.boxes.concat(allC.map((ct) => cityHitBox(ct, u)).map((b) => [b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r]));
+      if (S.meta.showArmies) S.armies.forEach((a) => soft.push([a.x - u * 2.2, a.y - u * 2.6, a.x + u * 2.2, a.y + u * 2.6]));
+      const rec = []; REC = rec; drawRegionLabels(c, s, st, soft); REC = null;
+      LC = { key: lk, rec, boxes: R.labelBoxes.slice(), cities: cl.list };
+      if (!opt.ctx) R._lc = LC;
+    }
+    R.labelBoxes = LC.boxes;
+    LC.rec.forEach((r) => { if (inView(r.g.x, r.g.y, r.g.size * 12)) drawLabel(c, r.g, r.fill, r.halo, r.weight); });
+    LC.cities.forEach((ct) => { if (inView(ct.x, ct.y, 200)) drawCityLabel(c, ct, u, s, st); });
     if (S.meta.showFamilies) (S.families || []).forEach((f) => {
       const ct = S.cities.find((k) => k.id === f.home); if (!ct || !inView(ct.x, ct.y)) return;
       const sz = u * 1.15, x = ct.x + u * 1.2, y = ct.y - R.cityIconSize(ct, u) * 0.9;
@@ -390,7 +415,7 @@
     const place = (o) => {
       const { name, info, kind, id, weight, fill, halo, maxW, k, maxScr, minScr, arr, must } = o;
       const cands = [{ x: info.x, y: info.y, r: info.r }, ...(info.alts || [])];
-      const put = (g, m, box) => { drawLabel(c, g, fill, halo, weight); placed.push(box); R.labelBoxes.push({ kind, id, x: g.x, y: g.y, ang: g.ang, ...m, size: g.size }); return true; };
+      const put = (g, m, box) => { if (REC) REC.push({ g, fill, halo, weight }); else drawLabel(c, g, fill, halo, weight); placed.push(box); R.labelBoxes.push({ kind, id, x: g.x, y: g.y, ang: g.ang, ...m, size: g.size }); return true; };
       const tryAt = (cd, scale, avoidSoft, needInside, minS) => {
         const g = geomFor(name, { ...info, x: cd.x, y: cd.y, r: Math.min(cd.r, info.r) }, maxW, 2, k * scale);
         g.size = Math.min(g.size, maxScr / s); if (g.size * s < minS) return false;
