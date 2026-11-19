@@ -89,6 +89,24 @@
   // ---------- 智能笔刷：锁定他国 / 以河为界 / 以山为界 / 以海为界 ----------
   const POL = ['color', 'nation', 'prov'];
   T.altDown = false;
+  // 湿颜料层 & 节流重算：涂色过程中只即时显示，重计算延后
+  T.wet = document.createElement('canvas'); T.wet.width = W; T.wet.height = H; T.wetCtx = T.wet.getContext('2d'); T.wetImg = T.wetCtx.createImageData(W, H); T.wetOn = false;
+  T.pending = {}; let flushT = 0;
+  const flushNow = (final) => {
+    const p = T.pending; T.pending = {};
+    if (final) { App.changed({ land: !!p.land, tint: !!p.tint, pol: !!(p.pol || p.land), ui: !!(p.pol || p.land) }); return; }
+    if (p.land || p.tint) App.changed({ land: !!p.land, tint: !!p.tint });
+    if (p.pol) T.pending.pol = true; if (p.land) T.pending.pol = true;
+  };
+  T.flushSoon = () => { App.R.request(); if (flushT) return; flushT = setTimeout(() => { flushT = 0; flushNow(false); }, 280); };
+  T.flushWet = () => { const b = T.wetBox; if (!b) return; T.wetBox = null; T.wetCtx.putImageData(T.wetImg, 0, 0, b[0], b[1], b[2] - b[0] + 1, b[3] - b[1] + 1); };
+  T.startStroke = () => { T.wetBox = null; T.wetImg = T.wetCtx.createImageData(W, H); T.wetCtx.clearRect(0, 0, W, H); T.wetOn = false; T.pending = {}; };
+  T.endStroke = () => {
+    clearTimeout(flushT); flushT = 0;
+    if ((T.cur === 'color' || T.cur === 'nation') && !T.opt.erase && T.pending.pol) App.Ops.fillUnassigned();
+    flushNow(true); T.wetOn = false; T.wetCtx.clearRect(0, 0, W, H);
+    if (T.cur === 'color') App.UI.refreshTool();
+  };
   T.locksOn = () => { const o = T.opt; return POL.includes(T.cur) && !T.altDown && !!(o.lockOther || o.lockRiver || o.lockMtn || o.lockSea); };
   let rMask = null, rKey = '';
   T.riverMask = () => {
@@ -178,8 +196,22 @@
         else if (prov && S.owner[c] === prov.nation && A[c] !== prov.id) { App.Ops.setProvCell(c, prov); ch = true; }
       }
     }
-    if (landCh) App.changed({ land: true, pol: true });
-    else if (ch) App.changed(tool === 'land' ? { land: true, pol: true } : tool === 'terrain' || tool === 'forest' ? { tint: true } : { pol: true });
+    if (!ch && !landCh) return;
+    const P = T.pending;
+    if (landCh || tool === 'land') { P.land = true; P.pol = true; }
+    if (tool === 'terrain' || tool === 'forest') P.tint = true;
+    if (POL.includes(tool)) {
+      P.pol = true;
+      // 即时显示：先把涂到的格子画到“湿颜料”层，松开鼠标再重算边界
+      const col = U.hexToRgb(tool === 'color' ? (o.erase ? '#e6d6b0' : o.color) : tool === 'nation' ? (o.erase ? '#e6d6b0' : App.nation(nid)?.color || '#888888') : U.shade(App.nation(prov ? prov.nation : nid)?.color || '#888888', 0.45));
+      const wc = T.wetCtx; wc.fillStyle = U.rgbToHex(col[0], col[1], col[2]);
+      for (const c of cells) {
+        const ok = tool === 'prov' ? (o.erase ? !App.provArr(o.provLevel || 1)[c] : prov && App.provArr(prov.level || 1)[c] === prov.id) : o.erase ? !S.owner[c] : S.owner[c] === (tool === 'color' ? cnid : nid);
+        if (ok) wc.fillRect(c % W, (c / W) | 0, 1, 1);
+      }
+      T.wetOn = true;
+    }
+    T.flushSoon();
   };
   // 油漆桶：同样遵守锁定（可一键填满被河流、山脉围起来的区域）
   const floodLocked = (c0, same, ctx) => {
@@ -266,7 +298,7 @@
       if (T.cur === 'nation' && !T.activeNation && !T.opt.erase) { App.UI.toast('请先在右侧「国家」面板选择或新建一个国家'); return; }
       if (T.cur === 'prov' && !T.activeProv && !T.opt.erase) { App.UI.toast('请先在右侧「行政区」面板选择或新建一个行政区'); return; }
       App.pushUndo(T.cur === "land" || T.cur === "color" ? ["terrain", "forest", "owner", "prov", "prov2", "prov3"] : T.cur === "terrain" ? ["terrain", "climate", "forest"] : T.cur === "forest" ? ["forest"] : ["owner", "prov", "prov2", "prov3"]);
-      drag = { type: 'brush', wx, wy }; paint(wx, wy); return;
+      T.startStroke(); drag = { type: 'brush', wx, wy }; paint(wx, wy); return;
     }
     if (DRAWLINE.includes(T.cur)) {
       if (T.cur === 'arrow' && !T.activeNation) { App.UI.toast('请先在右侧选择一个国家（箭头颜色）'); return; }
@@ -313,7 +345,7 @@
     canvas.style.cursor = '';
     if (!drag) return;
     const d = drag; drag = null;
-    if (d.type === 'brush') { if ((T.cur === 'color' || T.cur === 'nation') && !T.opt.erase) App.Ops.fillUnassigned(); App.Geo.dirtyPol = true; App.R.request(); App.UI.refresh(); if (T.cur === 'color') App.UI.refreshTool(); }
+    if (d.type === 'brush') T.endStroke();
     if (d.type === 'move' && d.pushed) { App.changed({}); App.UI.showSelection(); }
     if (d.type === 'line') {
       const pts = U.simplify(d.pts, 1.2 / App.R.view.s).map((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]);
