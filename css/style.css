@@ -158,3 +158,5 @@ button,input,select,textarea{font:inherit;color:inherit}
 .legend div{display:grid;grid-template-columns:16px 78px 1fr;gap:6px;align-items:center;margin:3px 0;font-size:12px}
 .legend i{width:16px;height:12px;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
 .legend small{color:var(--muted)}
+.lockbar{display:flex;flex-wrap:wrap;align-items:center;gap:3px;padding-left:6px;border-left:1px solid var(--line)}
+.chip.lock.on{background:#2d4a6a;border-color:#6a9ad0}
