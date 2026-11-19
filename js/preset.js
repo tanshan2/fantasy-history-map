@@ -246,6 +246,7 @@
     // 势力
     const nat = {}; Object.entries(NATIONS).forEach(([k, v]) => {
       const n = App.Ops.addNation({ name: v.name, color: v.color, culture: v.culture });
+      if (k === 'han') n.adminSys = 'han';
       if (v.label) n.label = { x: wx(v.label.lon), y: wy(v.label.lat), size: v.label.size, angle: v.label.angle };
       nat[k] = n;
     });
@@ -262,7 +263,7 @@
     // 未命名省份的国家：自动划分
     ['tianzhu', 'yeda', 'linan', 'yunmeng', 'liugui'].forEach((k) => {
       const n = nat[k]; let cnt = 0; for (let c = 0; c < N; c++) if (S.owner[c] === n.id) cnt++;
-      App.Ops.autoProvinces(n.id, U.clamp(Math.round(cnt / 1400), 1, 6), U.rng(n.id * 77));
+      App.Ops.autoProvinces(n.id, 0, U.rng(n.id * 77));
     });
     ['han', 'xiyu', 'bosi', 'dongying'].forEach((k) => App.Ops.autoProvinces(nat[k].id, 0, U.rng(nat[k].id * 91), { keepL1: true }));
     // 城市
