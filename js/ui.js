@@ -143,11 +143,12 @@
         ${field('国名', `<div class="row"><input type="text" data-n="name" value="${U.esc(an.name)}"><button class="btn" data-act="rndName" title="按文明随机">🎲</button></div>`)}
         ${field('颜色', `<input type="color" data-n="color" value="${an.color}">`)}
         ${field('文明', cultureSel(an.culture, 'nCulture'))}
+        ${field("行政区划制度", `<select data-act="adminSys">${UI.sysOptions(an)}</select>`)}<p class="muted">${U.esc(App.sysOf(an).note || "")}</p>
         <p class="muted">国名自动显示在领土最宽处，不能拖动。</p>
-        <div class="row wrap"><button class="btn" data-act="rndAll">🎲 全部重命名（国/省/道/府/城）</button></div>
-        <h4 style="margin-top:10px">自动划分三级行政区</h4>
-        <div class="row wrap"><label class="inline">分成 <input type="number" min="1" max="40" value="${UI.provK || 5}" data-act="provK" style="width:52px"> 个省，道/府按面积自动细分</label></div>
-        <div class="row wrap"><button class="btn" data-act="autoProv">重新划分全部</button><button class="btn" data-act="autoSub">保留省，只细分道/府</button></div>
+        <div class="row wrap"><button class="btn" data-act="rndAll">🎲 全部重新命名（国、各级行政区、城）</button></div>
+        <h4 style="margin-top:10px">自动划分行政区（${[1, 2, 3].slice(0, App.maxLevel(an)).map((l) => App.levelName(an, l)).join(" → ")}）</h4>
+        <div class="row wrap"><label class="inline">分成 <input type="number" min="1" max="40" value="${UI.provK || ""}" placeholder="自动" data-act="provK" style="width:58px"> 个${App.levelName(an, 1)}，下级按制度比例自动细分</label></div>
+        <div class="row wrap"><button class="btn" data-act="autoProv">重新划分全部</button><button class="btn" data-act="autoSub">保留${App.levelName(an, 1)}，只细分下级</button></div>
         <div class="row wrap"><button class="btn" data-act="autoCity">自动生成城市</button><button class="btn danger" data-act="delNation">删除国家</button></div></div>`;
     }
     h += `<div class="row wrap"><button class="btn" data-act="autoAll">一键划分所有国家的行政区</button><button class="btn" data-act="recolor">相邻国家自动配色</button><button class="btn" data-act="family">家族 / 族谱…</button></div>`;
@@ -161,18 +162,18 @@
     const row = (p) => {
       const lv = p.level || 1, open = UI.provOpen?.[p.id];
       const sub = lv < 3 ? kids(p.id, lv + 1) : [];
-      return `<li class="lv${lv} ${p.id === T().activeProv ? 'on' : ''}" data-prov="${p.id}"><em data-ptog="${p.id}">${sub.length ? (open ? '▾' : '▸') : '·'}</em><span>${U.esc(p.name)}</span><small>${App.LEVELS[lv].name}${sub.length ? ' · ' + sub.length : ''}</small></li>` + (open ? sub.map(row).join('') : '');
+      return `<li class="lv${lv} ${p.id === T().activeProv ? 'on' : ''}" data-prov="${p.id}"><em data-ptog="${p.id}">${sub.length ? (open ? '▾' : '▸') : '·'}</em><span>${U.esc(p.name)}</span><small>${App.levelName(an, lv)}${sub.length ? ' · ' + sub.length : ''}</small></li>` + (open ? sub.map(row).join('') : '');
     };
     let h = `<div class="row"><b style="color:${an.color}">■</b>&nbsp;${U.esc(an.name)} 的行政区</div>
-      <div class="row wrap"><button class="btn pri" data-act="addProv">＋ 新建省</button></div>`;
+      <div class="row wrap"><button class="btn pri" data-act="addProv">＋ 新建${App.levelName(an, 1)}</button></div><p class="muted">制度：${App.sysOf(an).name}（在「国家」页修改）</p><div></div>`;
     h += '<ul class="list ptree">' + kids(0, 1).map(row).join('') + '</ul>';
     if (!ps.length) h += '<p class="muted">新建省后，可在省下面建道、在道下面建府；选中后用左侧「行政区」工具在本国领土内涂抹。也可以回到「国家」页一键自动划分。</p>';
     const ap = App.province(T().activeProv);
     if (ap && ap.nation === an.id) {
       const lv = ap.level || 1, par = App.province(ap.parent);
-      h += `<div class="card"><h4>编辑${App.LEVELS[lv].full}</h4>${par ? `<p class="muted">隶属：${U.esc(par.name)}</p>` : ''}
+      h += `<div class="card"><h4>编辑${App.levelName(an, lv)}（${["", "一", "二", "三"][lv]}级）</h4>${par ? `<p class="muted">隶属：${U.esc(par.name)}</p>` : ''}
       ${field('名称', `<div class="row"><input type="text" data-p="name" value="${U.esc(ap.name)}"><button class="btn" data-act="rndProv">🎲</button></div>`)}
-      <div class="row wrap">${lv < 3 ? `<button class="btn pri" data-act="addSub">＋ 下设${App.LEVELS[lv + 1].name}</button>` : ''}<button class="btn danger" data-act="delProv">删除（含下级）</button></div></div>`;
+      <div class="row wrap">${lv < App.maxLevel(an) ? `<button class="btn pri" data-act="addSub">＋ 下设${App.levelName(an, lv + 1)}</button>` : ""}<button class="btn danger" data-act="delProv">删除（含下级）</button></div></div>`;
     }
     return h;
   };
@@ -236,14 +237,15 @@
     act('provK', (b) => (UI.provK = +b.value));
     act("autoSub", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, 0, Math.random, { keepL1: true }); App.changed({ pol: true, ui: true }); });
     act("family", () => App.Family.show());
+    act('adminSys', (b) => { const ns = App.ADMIN_SYS[b.value], has = S.provinces.some((p) => p.nation === an.id); if (has && !confirm('切换为「' + ns.name + '」？\n已有行政区会保留地名、改成新的级别名称' + (ns.levels < 3 ? '，并删除第三级' : '') + '。')) { UI.refresh(); return; } App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.setAdminSys(an, b.value); App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('autoAll', () => { const redo = App.S.provinces.length && confirm('已有行政区的国家也重新划分吗？\n确定＝全部重新划分，取消＝只划分还没有行政区的'); App.pushUndo(['prov', 'prov2', 'prov3']); const k = App.Ops.autoAllProvinces(redo); App.changed({ pol: true, ui: true }); UI.toast('已划分 ' + k + ' 个国家'); });
-    act("autoProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, UI.provK || 5); App.changed({ pol: true, ui: true }); });
+    act("autoProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, UI.provK || 0); App.changed({ pol: true, ui: true }); });
     act('autoCity', () => { App.pushUndo(); App.Ops.autoCities(an.id); App.changed({ ui: true }); });
     act('delNation', () => { if (!confirm(`删除「${an.name}」？（可撤销）`)) return; App.pushUndo(["owner", "prov", "prov2", "prov3"]); App.Ops.deleteNation(an.id); T().activeNation = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('recolor', () => { App.pushUndo(); App.Ops.recolor(); App.changed({ pol: true, ui: true }); });
     act("addSub", () => { App.pushUndo(); const pr = App.Ops.addProvince(an.id, null, (ap.level || 1) + 1, ap.id); UI.provOpen = UI.provOpen || {}; UI.provOpen[ap.id] = true; T().activeProv = pr.id; T().set("prov"); App.changed({ ui: true }); });
     act("addProv", () => { App.pushUndo(); const pr = App.Ops.addProvince(an.id, null, 1, 0); T().activeProv = pr.id; T().set('prov'); App.changed({ ui: true }); });
-    act('rndProv', () => { App.pushUndo(); ap.name = App.Names.prov(an.culture, Math.random, ap.level || 1); App.changed({ ui: true }); });
+    act('rndProv', () => { App.pushUndo(); Object.assign(ap, App.Names.provFor(an, ap.level || 1)); App.changed({ ui: true }); });
     act("delProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.deleteProvince(ap.id); T().activeProv = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('loadRef', () => $('#fileImg').click());
     act('delRef', () => { S.meta.ref = null; App.changed({ ui: true }); });
@@ -271,7 +273,7 @@
     if (k === 'lines') h += sel_('style', '样式', App.LINE_STYLES) + inp('color', '颜色(可选)', 'color') + '<p class="muted">拖动节点修改，双击增删节点。</p>';
     if (k === 'arrows') h += nat('nation') + inp('width', '宽度', 'range', 'min="4" max="40"');
     if (k === "nationLabel") h += inp("name", "国名") + "<p class=\"muted\">国名固定显示在领土最宽处。</p>";
-    if (k === "provLabel") h += inp("name", "名称") + `<p class="muted">${App.LEVELS[o.level || 1].full}，名字固定在区域内。</p>`;
+    if (k === "provLabel") h += inp("name", "名称") + `<p class="muted">${App.levelName(App.nation(o.nation), o.level || 1)}（${["", "一", "二", "三"][o.level || 1]}级），名字固定在区域内。</p>`;
     box.innerHTML = h;
     box.querySelectorAll('[data-o]').forEach((i) => {
       i.onfocus = () => App.pushUndo();
@@ -287,7 +289,7 @@
       App.pushUndo();
       const c = App.Ops.cellAt(o.x ?? 0, o.y ?? 0), nn = App.nation(k === 'nationLabel' ? o.id : k === 'provLabel' ? o.nation : c >= 0 ? App.S.owner[c] : 0);
       const cul = nn ? nn.culture : 'huaxia';
-      if (k === 'nationLabel') o.name = App.Names.nation(cul); else if (k === "provLabel") o.name = App.Names.prov(cul, Math.random, o.level || 1); else if ('name' in o || k === 'cities') o.name = App.Names.city(cul);
+      if (k === 'nationLabel') o.name = App.Names.nation(cul); else if (k === "provLabel") Object.assign(o, App.Names.provFor(App.nation(o.nation), o.level || 1)); else if ('name' in o || k === 'cities') o.name = App.Names.city(cul);
       App.changed({ ui: true });
     };
   };
@@ -377,7 +379,7 @@
   UI.provOptions = () => {
     const ps = App.S.provinces.filter((p) => p.nation === App.Tools.activeNation), out = [];
     const walk = (pid, lv) => ps.filter((p) => (p.level || 1) === lv && (lv === 1 || p.parent === pid)).forEach((p) => {
-      out.push(`<option value="${p.id}" ${p.id === App.Tools.activeProv ? 'selected' : ''}>${'　'.repeat(lv - 1)}${App.LEVELS[lv].name}·${U.esc(p.name)}</option>`);
+      out.push(`<option value="${p.id}" ${p.id === App.Tools.activeProv ? 'selected' : ''}>${'　'.repeat(lv - 1)}${App.levelName(App.nation(App.Tools.activeNation), lv)}·${U.esc(p.name)}</option>`);
       if (lv < 3) walk(p.id, lv + 1);
     });
     walk(0, 1); return out.join('');
@@ -387,7 +389,7 @@
   };
   UI.initLv = () => {
     const box = document.getElementById('lvBtns'); if (!box) return;
-    box.innerHTML = '<span>行政区</span>' + [1, 2, 3].map((lv) => `<button class="chip" data-lv="${lv}">${App.LEVELS[lv].name}</button>`).join('');
+    box.innerHTML = '<span>行政区</span>' + [1, 2, 3].map((lv) => `<button class="chip" data-lv="${lv}">${["", "一级", "二级", "三级"][lv]}</button>`).join("");
     box.onclick = (e) => {
       const b = e.target.closest('[data-lv]'); if (!b) return;
       const k = 'lv' + b.dataset.lv;
@@ -410,3 +412,11 @@
     return `<div class="swatches">${UI.SWATCHES.map((c) => `<button class="sw ${c === cur ? 'on' : ''} ${used.has(c) ? 'used' : ''}" data-sw="${c}" style="background:${c}" title="${c}"></button>`).join('')}<label class="cpick" title="自定义颜色"><input type="color" data-cpick="1" value="${cur || '#c8584a'}"></label></div>`;
   };
 })();
+
+// ---- 行政区划制度下拉：本文明的制度排在前面 ----
+App.UI.sysOptions = (n) => {
+  const cur = App.sysKey(n), all = Object.entries(App.ADMIN_SYS);
+  const mine = all.filter(([, s]) => s.cul === n.culture), other = all.filter(([, s]) => s.cul !== n.culture);
+  const o = ([k, s]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${s.name}${s.levels === 2 ? '（两级）' : ''}</option>`;
+  return (mine.length ? `<optgroup label="本文明">${mine.map(o).join('')}</optgroup>` : '') + `<optgroup label="其他文明">${other.map(o).join('')}</optgroup>`;
+};
