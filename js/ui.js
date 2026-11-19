@@ -99,7 +99,9 @@
       case 'marker': h = chips('markerType', App.MARKER_TYPES); break;
       case 'text': h = `<label class="rng">字号 <input type="range" min="8" max="120" step="1" value="${o.textSize}" data-num="textSize"><b>${o.textSize}</b></label><span class="hint">点击地图放置文字（海名、地区名、标题框…）</span>`; break;
     }
+    if (['color', 'nation', 'prov'].includes(T().cur)) h += UI.lockBar();
     const bar = $('#optbar'); bar.innerHTML = h;
+    bar.querySelectorAll('[data-lock]').forEach((b) => (b.onclick = () => { o[b.dataset.lock] = !o[b.dataset.lock]; UI.refreshTool(); App.R.request(); }));
     bar.querySelectorAll('[data-opt]').forEach((b) => (b.onclick = () => {
       let v = b.dataset.val; if (v === 'true') v = true; else if (v === 'false') v = false; else if (/^\d+$/.test(v)) v = +v;
       o[b.dataset.opt] = v; UI.refreshTool(); App.R.request();
@@ -419,4 +421,11 @@ App.UI.sysOptions = (n) => {
   const mine = all.filter(([, s]) => s.cul === n.culture), other = all.filter(([, s]) => s.cul !== n.culture);
   const o = ([k, s]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${s.name}${s.levels === 2 ? '（两级）' : ''}</option>`;
   return (mine.length ? `<optgroup label="本文明">${mine.map(o).join('')}</optgroup>` : '') + `<optgroup label="其他文明">${other.map(o).join('')}</optgroup>`;
+};
+
+// ---- 笔刷锁定开关 ----
+App.UI.lockBar = () => {
+  const o = App.Tools.opt, prov = App.Tools.cur === 'prov';
+  const L = [['lockOther', prov ? '锁定他区' : '锁定他国', prov ? '不覆盖本国其他同级行政区' : '只涂无主之地，不覆盖别国'], ['lockRiver', '以河为界', '笔刷碰到河流就停'], ['lockMtn', '以山为界', '不涂山地、雪山，沿山脉成界'], ['lockSea', '以海为界', '只涂与笔刷中心相连的陆地，不跨海峡']];
+  return `<span class="lockbar"><span class="grp">🔒 锁定</span>${L.map(([k, n, t]) => `<button class="chip lock ${o[k] ? 'on' : ''}" data-lock="${k}" title="${t}">${n}</button>`).join('')}<span class="hint">按住 Alt 临时不受限制</span></span>`;
 };
