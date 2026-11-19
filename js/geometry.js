@@ -173,7 +173,7 @@
     ctx.putImageData(im, 0, 0);
     G.labels = labelStats(O);
     G.provLabels = new Map([...labelStats(P1), ...labelStats(P2), ...labelStats(P3)]);
-    G.dirtyPol = false;
+    G.dirtyPol = false; G.polVer = (G.polVer || 0) + 1;
   };
 
   // 区域标签：放在离边界最远的位置（区域最“厚”处），并给出主轴方向与可用尺寸
@@ -210,7 +210,7 @@
     for (let c = 0; c < N; c++) {
       const id = A[c]; if (!id) continue;
       const s = st.get(id), bd = dist[s.best];
-      if (dist[c] >= Math.max(2, bd * 0.5) && (U.hash(c, 7, 91) < 0.25 || dist[c] >= bd * 0.85)) { let p = pool.get(id); if (!p) pool.set(id, (p = [])); p.push(c); }
+      if (dist[c] >= Math.max(2, bd * 0.5) && (U.hash(c, 7, 91) < 0.05 || dist[c] >= bd * 0.9)) { let p = pool.get(id); if (!p) pool.set(id, (p = [])); p.push(c); }
     }
     const out = new Map();
     st.forEach((s, id) => {
