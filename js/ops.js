@@ -10,6 +10,7 @@
     App.R.request(); App.autosave();
   };
   App.changed = (what = {}) => {
+    if (what.land && App.S.meta.vec) { App.S.meta.vec = null; App.Geo.vecCoast = null; App.Geo.vecKey = null; App.Geo.dirtyPol = true; if (App.UI) App.UI.toast('你修改了陆地，海岸线改为可编辑模式'); }
     if (what.land) App.Geo.dirtyLand = true;
     if (what.tint) App.Geo.dirtyTint = true;
     if (what.pol) App.Geo.dirtyPol = true;
