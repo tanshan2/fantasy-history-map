@@ -4,7 +4,7 @@
   const T = (App.Tools = {
     cur: 'select', activeNation: 0, activeProv: 0, sel: null, mouse: null,
     opt: { brush: 5, land: 'land', terrain: 5, forest: 1, fill: false, erase: false, cityType: 'medium', armyType: 'infantry', strength: '1万',
-      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, lockOther: false, lockRiver: false, lockMtn: false, lockSea: false, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
+      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, lockOther: false, lockRiver: false, lockMtn: false, lockSea: false, askRefine: true, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
   });
   const BRUSH = ['color', 'land', 'terrain', 'forest', 'nation', 'prov'];
   // 彩色画笔：同一种颜色 = 同一块势力（没有就自动建一个未命名的）
@@ -104,7 +104,14 @@
   T.endStroke = () => {
     clearTimeout(flushT); flushT = 0;
     if ((T.cur === 'color' || T.cur === 'nation') && !T.opt.erase && T.pending.pol) App.Ops.fillUnassigned();
+    const hadPol = !!T.pending.pol;
     flushNow(true); T.wetOn = false; T.wetCtx.clearRect(0, 0, W, H);
+    if (hadPol && POL.includes(T.cur) && !T.opt.erase && T.opt.askRefine !== false && App.Refine && T.strokeSnap) {
+      const S = App.S, prov = App.province(T.activeProv), lv = prov ? prov.level || 1 : 1;
+      const before = T.cur === 'prov' ? T.strokeSnap.arrs[App.provKey(lv)] : T.strokeSnap.arrs.owner, now = T.cur === 'prov' ? App.provArr(lv) : S.owner;
+      let k = 0; if (before) for (let c = 0; c < App.N && k < 15; c++) if (before[c] !== now[c]) k++;
+      if (k >= 15 && (T.cur !== 'prov' || prov)) App.Refine.ask({ tool: T.cur, snap: T.strokeSnap, prov, brush: T.opt.brush });
+    }
     if (T.cur === 'color') App.UI.refreshTool();
   };
   T.locksOn = () => { const o = T.opt; return POL.includes(T.cur) && !T.altDown && !!(o.lockOther || o.lockRiver || o.lockMtn || o.lockSea); };
@@ -298,7 +305,8 @@
       if (T.cur === 'nation' && !T.activeNation && !T.opt.erase) { App.UI.toast('请先在右侧「国家」面板选择或新建一个国家'); return; }
       if (T.cur === 'prov' && !T.activeProv && !T.opt.erase) { App.UI.toast('请先在右侧「行政区」面板选择或新建一个行政区'); return; }
       App.pushUndo(T.cur === "land" || T.cur === "color" ? ["terrain", "forest", "owner", "prov", "prov2", "prov3"] : T.cur === "terrain" ? ["terrain", "climate", "forest"] : T.cur === "forest" ? ["forest"] : ["owner", "prov", "prov2", "prov3"]);
-      T.startStroke(); drag = { type: 'brush', wx, wy }; paint(wx, wy); return;
+      if (App.Refine) App.Refine.dismiss();
+      T.startStroke(); T.strokeSnap = App.undoStack[App.undoStack.length - 1]; drag = { type: 'brush', wx, wy }; paint(wx, wy); return;
     }
     if (DRAWLINE.includes(T.cur)) {
       if (T.cur === 'arrow' && !T.activeNation) { App.UI.toast('请先在右侧选择一个国家（箭头颜色）'); return; }
@@ -374,6 +382,7 @@
   const key = (e) => {
     const tag = (e.target.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (App.Refine && App.Refine.isPending() && (e.key === 'Escape' || e.key === 'Enter')) return;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? App.redo() : App.undo(); return; }
     if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); App.redo(); return; }
