@@ -164,3 +164,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 #refineAsk[hidden]{display:none}
 #refineAsk span{color:#f3e2bd}
 #refineAsk .ck{color:var(--muted);font-size:12px;margin:0}
+.terr{background:rgba(255,214,110,.07);border:1px solid rgba(255,214,110,.25);border-radius:8px;padding:6px 8px;margin:8px 0}
+.terr .row{margin:2px 0;flex-wrap:wrap}.terr .row .btn{margin-left:auto}
+.exl{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
