@@ -147,6 +147,7 @@
         ${field('文明', cultureSel(an.culture, 'nCulture'))}
         ${field("行政区划制度", `<select data-act="adminSys">${UI.sysOptions(an)}</select>`)}<p class="muted">${U.esc(App.sysOf(an).note || "")}</p>
         <p class="muted">国名自动显示在领土最宽处，不能拖动。</p>
+        ${UI.territoryInfo(an)}
         <div class="row wrap"><button class="btn" data-act="rndAll">🎲 全部重新命名（国、各级行政区、城）</button></div>
         <h4 style="margin-top:10px">自动划分行政区（${[1, 2, 3].slice(0, App.maxLevel(an)).map((l) => App.levelName(an, l)).join(" → ")}）</h4>
         <div class="row wrap"><label class="inline">分成 <input type="number" min="1" max="40" value="${UI.provK || ""}" placeholder="自动" data-act="provK" style="width:58px"> 个${App.levelName(an, 1)}，下级按制度比例自动细分</label></div>
@@ -210,7 +211,8 @@
   // ---------- 面板事件 ----------
   const bind = (p) => {
     const S = App.S;
-    p.querySelectorAll('[data-nation]').forEach((li) => (li.onclick = () => { T().activeNation = +li.dataset.nation; T().activeProv = 0; UI.refresh(); UI.refreshTool(); }));
+    p.querySelectorAll('[data-nation]').forEach((li) => (li.onclick = () => T().highlight(+li.dataset.nation)));
+    p.querySelectorAll('[data-zoom]').forEach((b) => (b.onclick = () => { const comps = App.Geo.nationComps(+b.dataset.zoom), k = b.dataset.comp; if (!comps.length) return; if (k === 'all') { const bx = comps.reduce((a, q) => [Math.min(a[0], q.box[0]), Math.min(a[1], q.box[1]), Math.max(a[2], q.box[2]), Math.max(a[3], q.box[3])], [1e9, 1e9, -1e9, -1e9]); App.R.zoomToBox(bx); } else App.R.zoomToBox(comps[+k].box, 0.35); T().highlight(+b.dataset.zoom); }));
     p.querySelectorAll("[data-ptog]").forEach((e) => (e.onclick = (ev) => { ev.stopPropagation(); UI.provOpen = UI.provOpen || {}; UI.provOpen[e.dataset.ptog] = !UI.provOpen[e.dataset.ptog]; UI.refresh(); }));
     p.querySelectorAll("[data-prov]").forEach((li) => (li.onclick = () => { T().activeProv = +li.dataset.prov; if (T().cur !== "prov") T().set("prov"); UI.refresh(); UI.refreshTool(); }));
     p.querySelectorAll("[data-style]").forEach((b) => (b.onclick = () => { const st = App.R.STYLES[b.dataset.style]; S.meta.style = b.dataset.style; S.meta.ocean = st.ocean; App.R.request(); App.autosave(); UI.refresh(); }));
@@ -430,4 +432,13 @@ App.UI.lockBar = () => {
   const o = App.Tools.opt, prov = App.Tools.cur === 'prov';
   const L = [['lockOther', prov ? '锁定他区' : '锁定他国', prov ? '不覆盖本国其他同级行政区' : '只涂无主之地，不覆盖别国'], ['lockRiver', '以河为界', '笔刷碰到河流就停'], ['lockMtn', '以山为界', '不涂山地、雪山，沿山脉成界'], ['lockSea', '以海为界', '只涂与笔刷中心相连的陆地，不跨海峡']];
   return `<span class="lockbar"><span class="grp">🔒 锁定</span>${L.map(([k, n, t]) => `<button class="chip lock ${o[k] ? 'on' : ''}" data-lock="${k}" title="${t}">${n}</button>`).join('')}<button class="chip lock ${o.askRefine !== false ? "on" : ""}" data-lock="askRefine" title="每画完一笔，询问是否用 AI 修整成更像真实疆界的线">✨ 画完询问 AI 修边</button><span class="hint">按住 Alt 临时不受限制</span></span>`;
+};
+
+// ---- 领土信息：面积、块数、飞地定位 ----
+App.UI.territoryInfo = (n) => {
+  const comps = App.Geo.nationComps(n.id); if (!comps.length) return '<p class="muted">还没有领土。</p>';
+  const total = comps.reduce((a, k) => a + k.n, 0), ex = comps.slice(1);
+  let h = `<div class="terr"><div class="row"><b>领土</b>&nbsp;${total} 格 · ${comps.length} 块${ex.length ? `（本土 + ${ex.length} 块飞地）` : '（连成一片）'}<button class="btn small" data-zoom="${n.id}" data-comp="all">全国</button></div>`;
+  if (ex.length) h += `<div class="exl">${ex.slice(0, 12).map((k, i) => `<button class="chip" data-zoom="${n.id}" data-comp="${i + 1}">飞地 ${i + 1} · ${k.n}格 ⌖</button>`).join('')}${ex.length > 12 ? `<span class="hint">…另有 ${ex.length - 12} 块</span>` : ''}</div>`;
+  return h + '</div>';
 };
