@@ -16,13 +16,13 @@
     sasanian: S([null, ['方区'], ['州'], ['乡']], { name: '萨珊·库斯特—沙赫尔—鲁斯塔克', cul: 'persia', levels: 3, per: 3500, kids: [null, null, [4, 10], [3, 7]], note: '萨珊波斯分四方区（库斯特），下辖沙赫尔（州），州下有鲁斯塔克（乡）。' }),
     satrapy: S([null, ['总督区'], ['行政区']], { name: '阿契美尼德·总督区—行政区', cul: 'persia', levels: 2, per: 1500, kids: [null, null, [3, 8]], note: '大流士一世设二十余总督区（萨特拉普）。' }),
     mandala: S([null, ['属国'], ['州'], ['村落']], { name: '南洋·曼陀罗：属国—州—村落', cul: 'nanyang', levels: 3, per: 1500, kids: [null, null, [3, 7], [3, 8]], note: '东南亚古国以王城为中心，四周属国朝贡。' }),
-    lateRome: S([null, ['Praefectura {X}'], ['Dioecesis {X}'], ['Provincia {X}']], { name: '晚期罗马：大区—管区—行省', cul: 'latin', levels: 3, per: 5000, kids: [null, null, [2, 5], [4, 10]], note: '戴克里先改革：四大区、十余管区、百余行省。' }),
-    theme: S([null, ['Theme of {X}'], ['Tourma of {X}'], ['Droungos of {X}']], { name: '拜占庭军区制：军区—图尔马—德隆戈斯', cul: 'greek', levels: 3, per: 1800, kids: [null, null, [2, 4], [3, 6]], note: '军区（Thema）既是军事单位也是行政区。' }),
-    feudal: S([null, ['Duchy of {X}'], ['County of {X}'], ['Barony of {X}']], { name: '封建制：公国—伯国—男爵领', cul: 'german', levels: 3, per: 1600, kids: [null, null, [3, 7], [2, 6]], note: '中世纪欧洲分封：公爵领下有伯爵领，伯爵领下有男爵领。' }),
-    shire: S([null, ['Earldom of {X}'], ['{X}shire', '{X}shire', 'Shire of {X}'], ['{X} Hundred']], { name: '英格兰：伯爵领—郡—百户区', cul: 'english', levels: 3, per: 1600, kids: [null, null, [3, 6], [4, 10]], note: '盎格鲁-撒克逊时期以郡（shire）为基本单位，郡下分百户区。' }),
-    guberniya: S([null, ['{X} Governorate'], ['{X} Uyezd'], ['{X} Volost']], { name: '帝俄：省—县—乡', cul: 'slavic', levels: 3, per: 2500, kids: [null, null, [6, 12], [5, 12]], note: '彼得大帝设省（губерния），省下有县（уезд）、乡（волость）。' }),
-    wilayah: S([null, ['Wilayat {X}'], ['Kura {X}'], ['Rustaq {X}']], { name: '哈里发：维拉亚—库拉—鲁斯塔克', cul: 'arabic', levels: 3, per: 2800, kids: [null, null, [3, 8], [3, 7]], note: '阿拔斯王朝的行省（维拉亚）下分区（库拉）与乡（鲁斯塔克）。' }),
-    ottoman: S([null, ['Eyalet of {X}'], ['Sanjak of {X}'], ['Kaza of {X}']], { name: '奥斯曼：埃亚莱特—桑贾克—卡扎', cul: 'any', levels: 3, per: 3000, kids: [null, null, [4, 10], [3, 8]], note: '奥斯曼帝国的行省（埃亚莱特）下辖桑贾克，桑贾克下辖卡扎。' }),
+    lateRome: S([null, ['大区'], ['管区'], ['行省']], { name: '晚期罗马：大区—管区—行省', cul: 'latin', levels: 3, per: 5000, kids: [null, null, [2, 5], [4, 10]], note: '戴克里先改革：四大区、十余管区、百余行省。' }),
+    theme: S([null, ['军区'], ['图尔马'], ['德隆戈斯']], { name: '拜占庭军区制：军区—图尔马—德隆戈斯', cul: 'greek', levels: 3, per: 1800, kids: [null, null, [2, 4], [3, 6]], note: '军区（Thema）既是军事单位也是行政区。' }),
+    feudal: S([null, ['公国'], ['伯国'], ['男爵领']], { name: '封建制：公国—伯国—男爵领', cul: 'german', levels: 3, per: 1600, kids: [null, null, [3, 7], [2, 6]], note: '中世纪欧洲分封：公爵领下有伯爵领，伯爵领下有男爵领。' }),
+    shire: S([null, ['伯爵领'], ['郡'], ['百户区']], { name: '英格兰：伯爵领—郡—百户区', cul: 'english', levels: 3, per: 1600, kids: [null, null, [3, 6], [4, 10]], note: '盎格鲁-撒克逊时期以郡（shire）为基本单位，郡下分百户区。' }),
+    guberniya: S([null, ['省'], ['县'], ['乡']], { name: '帝俄：省—县—乡', cul: 'slavic', levels: 3, per: 2500, kids: [null, null, [6, 12], [5, 12]], note: '彼得大帝设省（губерния），省下有县（уезд）、乡（волость）。' }),
+    wilayah: S([null, ['省'], ['区'], ['乡']], { name: '哈里发：维拉亚—库拉—鲁斯塔克', cul: 'arabic', levels: 3, per: 2800, kids: [null, null, [3, 8], [3, 7]], note: '阿拔斯王朝的行省（维拉亚）下分区（库拉）与乡（鲁斯塔克）。' }),
+    ottoman: S([null, ['行省'], ['桑贾克'], ['卡扎']], { name: '奥斯曼：埃亚莱特—桑贾克—卡扎', cul: 'any', levels: 3, per: 3000, kids: [null, null, [4, 10], [3, 8]], note: '奥斯曼帝国的行省（埃亚莱特）下辖桑贾克，桑贾克下辖卡扎。' }),
   };
   App.DEFAULT_SYS = { huaxia: 'ming', steppe: 'decimal', wa: 'ritsuryo', tianzhu: 'gupta', persia: 'sasanian', nanyang: 'mandala', latin: 'lateRome', greek: 'theme', german: 'feudal', norse: 'feudal', celtic: 'feudal', english: 'shire', slavic: 'guberniya', arabic: 'wilayah' };
   App.sysOf = (n) => App.ADMIN_SYS[(n && n.adminSys) || App.DEFAULT_SYS[n ? n.culture : 'huaxia'] || 'ming'] || App.ADMIN_SYS.ming;
