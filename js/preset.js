@@ -237,12 +237,12 @@
   };
   App.Preset.asia = async () => {
     const S = await buildBase();
-    S.meta.name = '亚洲模板'; S.meta.year = 1;
+    S.meta.name = '亚洲模板'; S.meta.year = 1; S.meta.vec = 'asia'; App.Templates.ensureVec('asia');
     App.undoStack.length = 0; App.redoStack.length = 0;
   };
   App.Preset.tianhan = async () => {
     const S = await buildBase();
-    S.meta.name = '天汉历626年';
+    S.meta.name = '天汉历626年'; S.meta.vec = 'asia'; App.Templates.ensureVec('asia');
     // 势力
     const nat = {}; Object.entries(NATIONS).forEach(([k, v]) => {
       const n = App.Ops.addNation({ name: v.name, color: v.color, culture: v.culture });
