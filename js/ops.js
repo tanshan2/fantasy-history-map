@@ -4,6 +4,7 @@
   const O = (App.Ops = {});
 
   App.afterBigChange = () => {
+    if (App.Tools && App.Tools.hl && !App.nation(App.Tools.hl)) App.Tools.hl = 0;
     if (App.Tools && App.Tools.sel && !App.Tools.selObj()) App.Tools.sel = null;
     App.Geo.dirtyLand = App.Geo.dirtyPol = true;
     if (App.UI) App.UI.refresh();
