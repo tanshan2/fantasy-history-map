@@ -87,7 +87,10 @@
     c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
     c.drawImage(G.glowCanvas, 0, 0, WW, HH);
     // 陆地
-    const coast = G.coastPath;
+    // 有高精度矢量海岸（真实地理模板）时用它，否则用格子推算的海岸
+    if (S.meta.vec && G.vecKey !== S.meta.vec && App.Templates) App.Templates.ensureVec(S.meta.vec);
+    const vec = S.meta.vec && G.vecKey === S.meta.vec ? G.vecCoast : null;
+    const coast = vec || G.coastPath;
     c.save(); c.clip(coast, 'evenodd');
     c.fillStyle = '#f1e9d6'; c.fillRect(0, 0, WW, HH);
     c.globalAlpha = st.tintA; c.drawImage(G.tintCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
@@ -108,6 +111,7 @@
     c.restore();
     if (!exp && App.Tools && App.Tools.wetOn) { App.Tools.flushWet(); c.save(); c.imageSmoothingEnabled = false; c.globalAlpha = Math.min(0.85, st.nationA + 0.05); c.drawImage(App.Tools.wet, 0, 0, WW, HH); c.restore(); c.imageSmoothingEnabled = true; }
     // 海岸线
+    if (vec && G.lakePath) { c.fillStyle = S.meta.ocean || st.ocean; c.fill(G.lakePath, "evenodd"); c.globalAlpha = st.seaAlpha; c.fillStyle = pats.sea; c.fill(G.lakePath, "evenodd"); c.globalAlpha = 1; c.strokeStyle = st.coast; c.lineWidth = sw(st.coastW * 0.8); c.stroke(G.lakePath); }
     c.strokeStyle = st.coast; c.lineWidth = sw(st.coastW); c.lineJoin = 'round'; c.stroke(coast);
     // 地形 & 森林图标
     if (S.meta.showIcons && G.icons) {
