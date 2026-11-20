@@ -137,6 +137,7 @@
       c.globalCompositeOperation = 'multiply'; c.fillStyle = ag; c.fillRect(0, 0, WW, HH);
       c.fillStyle = pats.paper; c.globalAlpha = 0.35; c.fillRect(0, 0, WW, HH); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
     }
+    if (!exp && App.Tools && App.Tools.hl) drawHighlight(c, App.Tools.hl, s, sw, coast, vec);
     // 城市
     const u = 6 * Math.pow(s, 0.5) / s;
     R.cityBoxes = [];
@@ -178,6 +179,36 @@
     c.strokeStyle = '#0d1420'; c.lineWidth = 3 / s; c.strokeRect(0, 0, WW, HH);
     c.strokeStyle = 'rgba(214,196,150,.8)'; c.lineWidth = 1 / s; c.strokeRect(-4 / s, -4 / s, WW + 8 / s, HH + 8 / s);
     if (!exp && App.Tools) App.Tools.drawOverlay(c, s);
+  };
+
+  // ---- 选中国家高亮：聚光、光晕、飞地标注 ----
+  const drawHighlight = (c, id, s, sw, coast, vec) => {
+    const G = App.Geo, p = G.nationPaths.get(id), n = App.nation(id); if (!p || !n) return;
+    c.save();
+    const out = new Path2D(); out.rect(-WW, -HH, WW * 3, HH * 3); out.addPath(p);
+    // 1) 压暗其他地方（领土之外）
+    c.fillStyle = "rgba(12,9,6,0.34)"; c.fill(out, "evenodd");
+    c.restore(); c.save();
+    if (vec) c.clip(coast, "evenodd");
+    // 2) 领土提亮
+    c.save(); c.clip(p, "evenodd"); c.globalCompositeOperation = "screen"; c.fillStyle = U.rgba(U.shade(n.color, 0.55), 0.32); c.fillRect(-WW, -HH, WW * 3, HH * 3); c.restore();
+    // 3) 金色光晕描边
+    c.lineJoin = "round";
+    [[9, 0.16], [5.5, 0.3], [3, 0.55]].forEach(([w, a]) => { c.strokeStyle = `rgba(255,214,110,)`; c.lineWidth = sw(w); c.stroke(p); });
+    c.strokeStyle = "#fff3c4"; c.lineWidth = sw(1.3); c.stroke(p);
+    c.restore();
+    // 4) 飞地：虚线圈 + 标注
+    const comps = G.nationComps(id);
+    comps.slice(1).forEach((k) => {
+      const r = Math.max(k.box[2] - k.box[0], k.box[3] - k.box[1]) / 2 + 9 / s;
+      c.save(); c.setLineDash([5 / s, 4 / s]); c.strokeStyle = "#ffd66e"; c.lineWidth = 2 / s;
+      c.beginPath(); c.arc((k.box[0] + k.box[2]) / 2, (k.box[1] + k.box[3]) / 2, r, 0, Math.PI * 2); c.stroke(); c.setLineDash([]);
+      const fz = 11 / s; c.font = `700 px "Noto Serif SC", serif`; c.textAlign = "center"; c.textBaseline = "bottom";
+      c.lineWidth = fz * 0.3; c.strokeStyle = "rgba(30,20,10,.85)"; c.strokeText("飞地", (k.box[0] + k.box[2]) / 2, (k.box[1] + k.box[3]) / 2 - r - 2 / s);
+      c.fillStyle = "#ffe9a8"; c.fillText("飞地", (k.box[0] + k.box[2]) / 2, (k.box[1] + k.box[3]) / 2 - r - 2 / s);
+      c.restore();
+    });
+    c.restore();
   };
 
   // ---- 河流 ----
@@ -504,3 +535,12 @@
     return cv;
   };
 })();
+
+// 缩放到某个范围（世界坐标 [x0,y0,x1,y1]）
+App.R.zoomToBox = (b, minFrac = 0.6) => {
+  const R = App.R, cv = document.getElementById('map').getBoundingClientRect();
+  const w = Math.max(b[2] - b[0], 40), h = Math.max(b[3] - b[1], 40);
+  const s = U.clamp(Math.min(cv.width / w, cv.height / h) * minFrac, 0.15, 12);
+  R.view = { s, ox: cv.width / 2 - ((b[0] + b[2]) / 2) * s, oy: cv.height / 2 - ((b[1] + b[3]) / 2) * s };
+  R.request(); if (App.UI) App.UI.status();
+};
