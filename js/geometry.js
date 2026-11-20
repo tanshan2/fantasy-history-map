@@ -89,6 +89,7 @@
     const S = App.S, T = S.terrain;
     const m = G.collect((c) => (T[c] >= 2 ? 1 : 0));
     G.coastPath = G.pathOf(m.get(1) || []);
+    G.lakePath = G.pathOf(G.collect((c) => (T[c] === 1 ? 1 : 0)).get(1) || []);
     // 海岸光晕
     const land = (c) => T[c] >= 2;
     const d = bfs(land, (c) => !land(c), 9);
@@ -138,7 +139,15 @@
   G.rebuildPolitical = () => {
     const S = App.S, O = S.owner, P1 = S.prov, P2 = S.prov2, P3 = S.prov3;
     // 国家路径
-    const m = G.collect((c) => O[c]);
+    // 矢量海岸模式：把国家填色向海里外扩 2 格，保证贴满清晰的海岸线（海上部分会被裁掉）
+    let OD = O;
+    if (S.meta.vec) {
+      OD = O.slice(); const q = [];
+      for (let c = 0; c < N; c++) if (O[c]) q.push(c);
+      const dd = new Uint8Array(N);
+      for (let h = 0; h < q.length; h++) { const c = q[h]; if (dd[c] >= 2) continue; const x = c % W, y = (c / W) | 0; for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) if (n >= 0 && !OD[n] && S.terrain[n] < 2) { OD[n] = OD[c]; dd[n] = dd[c] + 1; q.push(n); } }
+    }
+    const m = G.collect((c) => OD[c]);
     G.nationPaths = new Map();
     m.forEach((edges, id) => G.nationPaths.set(id, G.pathOf(edges)));
     // 三级行政区界：上级相同、本级不同
