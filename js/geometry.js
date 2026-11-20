@@ -263,3 +263,26 @@ App.Geo.buildGlow = (key, rgb, maxD, alpha, power) => {
   }
   gctx.putImageData(gi, 0, 0); G.glowKey = key;
 };
+
+// 某国的所有连通领土块（含飞地），按面积从大到小
+App.Geo.nationComps = (id) => {
+  const G = App.Geo, key = (G.polVer || 0) + ':' + id;
+  if (G._compKey === key) return G._comps;
+  const W = App.W, H = App.H, N = App.N, C = App.CELL, O = App.S.owner, seen = new Uint8Array(N), comps = [];
+  for (let s = 0; s < N; s++) {
+    if (O[s] !== id || seen[s]) continue;
+    const q = [s]; seen[s] = 1; let n = 0, x0 = W, y0 = H, x1 = 0, y1 = 0, sx = 0, sy = 0;
+    while (q.length) {
+      const c = q.pop(), x = c % W, y = (c / W) | 0; n++; sx += x; sy += y;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      if (x > 0 && !seen[c - 1] && O[c - 1] === id) { seen[c - 1] = 1; q.push(c - 1); }
+      if (x < W - 1 && !seen[c + 1] && O[c + 1] === id) { seen[c + 1] = 1; q.push(c + 1); }
+      if (y > 0 && !seen[c - W] && O[c - W] === id) { seen[c - W] = 1; q.push(c - W); }
+      if (y < H - 1 && !seen[c + W] && O[c + W] === id) { seen[c + W] = 1; q.push(c + W); }
+    }
+    comps.push({ n, cx: (sx / n + 0.5) * C, cy: (sy / n + 0.5) * C, box: [x0 * C, y0 * C, (x1 + 1) * C, (y1 + 1) * C] });
+  }
+  comps.sort((a, b) => b.n - a.n);
+  G._compKey = key; G._comps = comps;
+  return comps;
+};
