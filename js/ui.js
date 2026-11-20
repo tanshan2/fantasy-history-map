@@ -427,5 +427,5 @@ App.UI.sysOptions = (n) => {
 App.UI.lockBar = () => {
   const o = App.Tools.opt, prov = App.Tools.cur === 'prov';
   const L = [['lockOther', prov ? '锁定他区' : '锁定他国', prov ? '不覆盖本国其他同级行政区' : '只涂无主之地，不覆盖别国'], ['lockRiver', '以河为界', '笔刷碰到河流就停'], ['lockMtn', '以山为界', '不涂山地、雪山，沿山脉成界'], ['lockSea', '以海为界', '只涂与笔刷中心相连的陆地，不跨海峡']];
-  return `<span class="lockbar"><span class="grp">🔒 锁定</span>${L.map(([k, n, t]) => `<button class="chip lock ${o[k] ? 'on' : ''}" data-lock="${k}" title="${t}">${n}</button>`).join('')}<span class="hint">按住 Alt 临时不受限制</span></span>`;
+  return `<span class="lockbar"><span class="grp">🔒 锁定</span>${L.map(([k, n, t]) => `<button class="chip lock ${o[k] ? 'on' : ''}" data-lock="${k}" title="${t}">${n}</button>`).join('')}<button class="chip lock ${o.askRefine !== false ? "on" : ""}" data-lock="askRefine" title="每画完一笔，询问是否用 AI 修整成更像真实疆界的线">✨ 画完询问 AI 修边</button><span class="hint">按住 Alt 临时不受限制</span></span>`;
 };
