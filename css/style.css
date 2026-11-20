@@ -160,3 +160,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .legend small{color:var(--muted)}
 .lockbar{display:flex;flex-wrap:wrap;align-items:center;gap:3px;padding-left:6px;border-left:1px solid var(--line)}
 .chip.lock.on{background:#2d4a6a;border-color:#6a9ad0}
+#refineAsk{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;background:rgba(36,28,20,.96);border:1px solid #b8893a;border-radius:12px;padding:10px 14px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:6;max-width:calc(100% - 32px)}
+#refineAsk[hidden]{display:none}
+#refineAsk span{color:#f3e2bd}
+#refineAsk .ck{color:var(--muted);font-size:12px;margin:0}
