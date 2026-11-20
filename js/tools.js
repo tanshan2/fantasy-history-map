@@ -2,7 +2,7 @@
 (() => {
   const W = App.W, H = App.H, C = App.CELL;
   const T = (App.Tools = {
-    cur: 'select', activeNation: 0, activeProv: 0, sel: null, mouse: null,
+    cur: 'select', activeNation: 0, activeProv: 0, sel: null, mouse: null, hl: 0,
     opt: { brush: 5, land: 'land', terrain: 5, forest: 1, fill: false, erase: false, cityType: 'medium', armyType: 'infantry', strength: '1万',
       lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, lockOther: false, lockRiver: false, lockMtn: false, lockSea: false, askRefine: true, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
   });
@@ -296,8 +296,9 @@
       const h = T.hit(wx, wy);
       if (h) {
         if (!(T.sel && T.sel.kind === h.kind && T.sel.id === h.id)) T.select({ kind: h.kind, id: h.id });
+        if (h.kind === 'nationLabel') T.highlight(h.id);
         drag = { type: 'move', hit: h, wx, wy, pushed: false };
-      } else { T.select(null); drag = { type: 'pan', sx, sy, ox: App.R.view.ox, oy: App.R.view.oy }; }
+      } else { T.select(null); drag = { type: 'pan', sx, sy, ox: App.R.view.ox, oy: App.R.view.oy, click: true, wx, wy }; }
       return;
     }
     if (BRUSH.includes(T.cur)) {
@@ -354,6 +355,10 @@
     if (!drag) return;
     const d = drag; drag = null;
     if (d.type === 'brush') T.endStroke();
+    // 选择工具：在地图上轻点（没拖动）= 选中这块领土的国家并高亮
+    if (d.type === 'pan' && d.click && T.cur === 'select') {
+      const [ux, uy] = pos(e); if (Math.hypot(ux - d.sx, uy - d.sy) < 5) { const c = App.Ops.cellAt(d.wx, d.wy), o = c >= 0 ? App.S.owner[c] : 0; T.highlight(o, true); }
+    }
     if (d.type === 'move' && d.pushed) { App.changed({}); App.UI.showSelection(); }
     if (d.type === 'line') {
       const pts = U.simplify(d.pts, 1.2 / App.R.view.s).map((p) => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]);
@@ -389,7 +394,7 @@
     if (mod) return;
     if (e.code === 'Space') { spaceDown = true; e.preventDefault(); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { T.deleteSel(); return; }
-    if (e.key === 'Escape') { drag = null; T.set('select'); return; }
+    if (e.key === 'Escape') { drag = null; if (T.hl) { T.highlight(0); return; } T.set('select'); return; }
     if (e.key === '[') { T.opt.brush = Math.max(0.5, T.opt.brush - 1); App.UI.refreshTool(); App.R.request(); return; }
     if (e.key === ']') { T.opt.brush = Math.min(40, T.opt.brush + 1); App.UI.refreshTool(); App.R.request(); return; }
     const map = { g: 'color', v: 'select', h: 'pan', l: 'land', t: 'terrain', f: 'forest', r: 'river', n: 'nation', p: 'prov', b: 'line', c: 'city', a: 'army', w: 'arrow', m: 'marker', x: 'text' };
@@ -425,3 +430,11 @@
     c.restore();
   };
 })();
+
+// ---- 选中国家高亮 ----
+App.Tools.highlight = (id, openPanel = false) => {
+  const T = App.Tools; T.hl = id || 0;
+  if (id) { T.activeNation = id; T.activeProv = 0; if (openPanel && App.UI) { App.UI.tab = 'nations'; document.body.classList.add('panel-open'); } }
+  if (App.UI) { App.UI.refresh(); App.UI.refreshTool(); }
+  App.R.request();
+};
