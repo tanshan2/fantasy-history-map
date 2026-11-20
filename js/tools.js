@@ -140,7 +140,7 @@
   };
   const allowCell = (c, ctx, locks) => {
     const S = App.S, o = T.opt, t = S.terrain[c];
-    if (t < 2) return T.cur === 'color' && o.makeLand && !o.erase && !(locks && o.lockSea);
+    if (t < 2) return T.cur === 'color' && o.makeLand && !App.S.meta.vec && !o.erase && !(locks && o.lockSea);
     if (!locks) return true;
     if (o.lockMtn && (t === 5 || t === 6)) return false;
     if (o.lockOther && !o.erase) {
@@ -184,7 +184,7 @@
       const t = S.terrain[c];
       if (tool === 'color') {
         if (o.erase) { if (S.owner[c]) { S.owner[c] = 0; App.Ops.clearAllProv(c); ch = true; } continue; }
-        if (t < 2) { if (!o.makeLand) continue; S.terrain[c] = 2; landCh = true; }
+        if (t < 2) { if (!o.makeLand || S.meta.vec) continue; S.terrain[c] = 2; landCh = true; }
         if (S.owner[c] !== cnid) { S.owner[c] = cnid; App.Ops.clearAllProv(c); ch = true; }
         continue;
       }
