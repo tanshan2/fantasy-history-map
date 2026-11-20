@@ -83,7 +83,7 @@
     document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('on', b.dataset.tool === T().cur));
     const o = T().opt; let h = '';
     switch (T().cur) {
-      case 'color': h = UI.colorBar() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush() + `<label class="ck"><input type="checkbox" data-mk="1" ${o.makeLand ? 'checked' : ''}> 涂到海里自动变陆地</label><button class="btn small" data-autoall="1" title="给还没有行政区的颜色区域自动划分省、道、府">一键划分行政区</button>`; break;
+      case 'color': h = UI.colorBar() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush() + `<label class="ck"><input type="checkbox" data-mk="1" ${o.makeLand && !App.S.meta.vec ? 'checked' : ''} ${App.S.meta.vec ? 'disabled title="真实地理模板中关闭，以保护精确海岸线；要改海岸请用「陆海」工具"' : ''}> 涂到海里自动变陆地</label><button class="btn small" data-autoall="1" title="给还没有行政区的颜色区域自动划分省、道、府">一键划分行政区</button>`; break;
       case 'select': h ='<span class="hint">点击选中对象，拖动移动；双击折线可增删节点；空白处拖动平移；Delete 删除</span>'; break;
       case 'pan': h = '<span class="hint">拖动平移，滚轮/双指缩放</span>'; break;
       case 'land': h = chips('land', [{ id: 'land', name: '画陆地' }, { id: 'ocean', name: '画海洋' }, { id: 'lake', name: '画湖泊' }]) + brush(); break;
@@ -201,7 +201,7 @@
     return h + '</div>';
   };
   const ck2 = (k, n, v) => `<label class="ck"><input type="checkbox" data-refck="${k}" ${v ? 'checked' : ''}> ${n}</label>`;
-  UI.tab_map = () => `<div class="card"><h4>新建 / 生成</h4><div class="row wrap"><button class="btn pri" data-act="newMap">新建或随机生成…</button><button class="btn" data-act="asia">载入亚洲模板</button><button class="btn" data-act="preset">载入示例「天汉历626年」</button></div></div>
+  UI.tab_map = () => `<div class="card"><h4>新建 / 生成</h4><div class="row wrap"><button class="btn pri" data-act="newMap">新建或随机生成…</button><button class="btn" data-act="asia">载入亚洲模板</button><button class="btn" data-act="europe">载入欧洲模板</button><button class="btn" data-act="preset">载入示例「天汉历626年」</button></div></div>
     <div class="card"><h4>旧存档</h4><p class="muted">之前版本自动保存的地图还在浏览器里，需要时可以找回。</p><button class="btn" data-act="oldSave">载入上一版本的存档</button></div>
     <div class="card"><h4>文件</h4><div class="row wrap"><button class="btn" data-act="save">保存为 JSON</button><button class="btn" data-act="open">打开 JSON</button><button class="btn" data-act="png">导出图片</button></div>
     <p class="muted">地图会自动保存在浏览器里（下次打开自动恢复）。想长期保存或换电脑，请「保存为 JSON」。</p></div>
@@ -253,7 +253,7 @@
     act('delRef', () => { S.meta.ref = null; App.changed({ ui: true }); });
     act('refFit', () => { const r = S.meta.ref; r.x = 0; r.y = 0; r.w = App.WW; r.h = App.HH; App.changed({ ui: true }); });
     act('oldSave', async () => { const s = await App.DB.get('autosave'); if (!s) { UI.toast('没有找到旧存档'); return; } if (!confirm('用旧存档替换当前地图？（当前地图会被覆盖，建议先保存 JSON）')) return; App.deserialize(JSON.parse(s)); App.afterBigChange(); App.R.fit(); UI.toast('已载入旧存档'); });
-    act('newMap', UI.newDialog); act("preset", () => UI.loadPreset("tianhan")); act("asia", () => UI.loadPreset("asia")); act('save', UI.saveJson); act('open', () => $('#fileJson').click()); act('png', UI.exportDialog);
+    act('newMap', UI.newDialog); act("preset", () => UI.loadPreset("tianhan")); act("asia", () => UI.loadPreset("asia")); act("europe", () => UI.loadPreset("europe")); act('save', UI.saveJson); act('open', () => $('#fileJson').click()); act('png', UI.exportDialog);
   };
 
   // ---------- 选中对象属性 ----------
@@ -307,6 +307,7 @@
   UI.newDialog = () => modal(`<h3>新建地图</h3>
     <div class="opts3">
       <div class="card"><h4>亚洲模板</h4><p class="muted">你那张图的真实亚洲地理：海岸线、山脉、沙漠、森林、河流、湖泊、气候都在，但没有任何国家，直接用「彩笔」涂色。</p><button class="btn pri" id="nAsia">载入亚洲模板</button>
+        <h4 style="margin-top:14px">欧洲模板</h4><p class="muted">西欧、东欧、北欧、南欧，加北非地中海沿岸、土耳其与西亚、阿拉伯半岛大部分。真实地理、无国家，直接涂色。</p><button class="btn pri" id="nEurope">载入欧洲模板</button>
         <h4 style="margin-top:14px">天汉历626年</h4><p class="muted">同一张亚洲地图，加上汉、西域盟大汗国、东瀛国等势力、城市和家族的完整示例。</p><button class="btn" id="nPreset">载入示例</button></div>
       <div class="card"><h4>随机大陆</h4>
         <div class="grid2">${field('大陆数量', '<input type="number" id="gK" value="3" min="1" max="7">')}${field('陆地比例', '<input type="range" id="gL" value="0.4" min="0.2" max="0.7" step="0.02">')}</div>
@@ -322,6 +323,7 @@
     $('#gNat', m).onchange = (e) => ($('#gNatOpts', m).hidden = !e.target.checked);
     $('#nBlank', m).onclick = () => { T().sel = null; m.hidden = true; App.Gen.blank(); App.afterBigChange(); App.R.fit(); T().set('color'); };
     $('#nAsia', m).onclick = () => { m.hidden = true; UI.loadPreset('asia'); };
+    $("#nEurope", m).onclick = () => { m.hidden = true; UI.loadPreset("europe"); };
     $('#nRand', m).onclick = () => { T().sel = null;
       const s = $('#gS', m).value.trim(); m.hidden = true;
       const o = { continents: +$('#gK', m).value || 3, land: +$('#gL', m).value, islands: +$('#gI', m).value, rough: +$('#gR', m).value, band: $('#gB', m).value,
@@ -337,7 +339,7 @@
   });
   UI.loadPreset = (which = 'tianhan') => { T().sel = null;
     UI.busy('正在载入真实地理数据…', async () => {
-      try { await App.Preset[which](); T().activeNation = 0; App.afterBigChange(); App.R.fit(); if (which === 'asia') T().set('color'); } catch (e) { console.error(e); UI.toast('载入失败：' + e.message); }
+      try { await App.Preset[which](); T().activeNation = 0; App.afterBigChange(); App.R.fit(); if (which === "asia" || which === "europe") T().set("color"); } catch (e) { console.error(e); UI.toast('载入失败：' + e.message); }
     });
   };
   UI.busy = (msg, fn) => {
