@@ -21,8 +21,8 @@
     marker: '<path d="M4 4l16 16M20 4L4 20" stroke="currentColor" stroke-width="2.6"/><path d="M4 8l4-4M16 4l4 4" stroke="currentColor" stroke-width="2"/>',
     text: '<path d="M4 5h16v3h-6v12h-4V8H4z"/>',
   };
-  const TOOLS = [['color', '彩笔', 'G'], ['select', '选择', 'V'], ['pan', '平移', 'H'], ['land', '陆海', 'L'], ['terrain', '地貌', 'T'], ['forest', '森林', 'F'], ['river', '河流', 'R'],
-    ['nation', '国家', 'N'], ['prov', '行政区', 'P'], ['line', '线条', 'B'], ['city', '城市', 'C'], ['army', '军队', 'A'], ['arrow', '进军', 'W'], ['marker', '标记', 'M'], ['text', '文字', 'X']];
+  const TOOLS = [['color', '彩笔', '1 / B'], ['select', '选择', '2 / V'], ['pan', '平移', 'H'], ['land', '陆海', '3 / L'], ['terrain', '地貌', '4 / T'], ['forest', '森林', '5 / F'], ['river', '河流', '6 / R'],
+    ['nation', '国家', '7 / N'], ['prov', '行政区', '8 / P'], ['line', '线条', 'K'], ['city', '城市', '9 / C'], ['army', '军队', '0 / J'], ['arrow', '进军', 'U'], ['marker', '标记', 'M'], ['text', '文字', 'X']];
 
   UI.init = () => {
     $('#tools').innerHTML = TOOLS.map(([id, n, k]) => `<button class="tool" data-tool="${id}" title="${n}（${k}）"><svg viewBox="0 0 24 24" fill="currentColor">${ICON[id]}</svg><span>${n}</span></button>`).join('');
@@ -84,7 +84,7 @@
     const o = T().opt; let h = '';
     switch (T().cur) {
       case 'color': h = UI.colorBar() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush() + `<label class="ck"><input type="checkbox" data-mk="1" ${o.makeLand && !App.S.meta.vec ? 'checked' : ''} ${App.S.meta.vec ? 'disabled title="真实地理模板中关闭，以保护精确海岸线；要改海岸请用「陆海」工具"' : ''}> 涂到海里自动变陆地</label><button class="btn small" data-autoall="1" title="给还没有行政区的颜色区域自动划分省、道、府">一键划分行政区</button>`; break;
-      case 'select': h ='<span class="hint">点击选中对象，拖动移动；双击折线可增删节点；空白处拖动平移；Delete 删除</span>'; break;
+      case 'select': h ='<span class="hint">点领土＝选中国家并高亮 · 点对象＝选中，拖动移动 · 双击改名 · Delete 删除 · WASD 移动地图 · Q/E 缩放</span>'; break;
       case 'pan': h = '<span class="hint">拖动平移，滚轮/双指缩放</span>'; break;
       case 'land': h = chips('land', [{ id: 'land', name: '画陆地' }, { id: 'ocean', name: '画海洋' }, { id: 'lake', name: '画湖泊' }]) + brush(); break;
       case 'terrain': h = chips('tmode', [{ id: 'terrain', name: '画地貌' }, { id: 'climate', name: '画气候' }]) + (o.tmode === 'climate' ? chips('climate', App.Climate.LIST.filter(Boolean)) + '<button class="btn small" data-rebiome="1" title="按气候重新铺设整张地图的地貌和森林（山地丘陵保留）">按气候重铺地貌</button>' : chips('terrain', App.TERRAINS)) + brush(); break;
@@ -360,13 +360,44 @@
     }));
   });
   const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
-  UI.help = () => modal(`<h3>使用说明</h3><div class="help">
-    <p><b>最快上手：</b>选「彩笔」（G），挑颜色直接涂，同色区域自动成为一块势力并画出边界；之后可在「国家」页给它起名。<br><b>完整流程：</b>①「陆海」画出海洋和大陆 →②「地貌」「森林」「河流」丰富地形 →③ 右侧新建国家，用「国家」工具涂色（油漆桶可一键填满）→④ 一键划分行政区 / 生成城市，或自己画 →⑤ 放置军队、进军箭头、战役标记、文字。</p>
-    <p><b>改名：</b>双击城市、国名、文字可直接改名；🎲 按所在国家的文明随机命名。</p>
-    <p><b>快捷键：</b>V 选择 · H 平移 · L 陆海 · T 地貌 · F 森林 · R 河流 · N 国家 · P 行政区 · B 线条 · C 城市 · A 军队 · W 进军 · M 标记 · X 文字 · [ ] 笔刷大小 · 空格+拖动 平移 · Ctrl/⌘+Z 撤销 · Ctrl/⌘+Shift+Z 重做 · Delete 删除</p>
-    <p><b>缩放：</b>滚轮 / 触控板双指捏合；右键或中键拖动也能平移。</p>
-    <p><b>保存：</b>自动保存在浏览器中；「保存」导出 JSON 文件可备份或分享。</p></div>
+  UI.help = () => {
+    const K = (s) => s.split(' ').map((x) => `<kbd>${x}</kbd>`).join(' ');
+    const row = (k, d) => `<div><span>${d}</span><span>${k}</span></div>`;
+    const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+    modal(`<h3>快捷键（按 <kbd>?</kbd> 随时打开）</h3><div class="keys">
+      <h4>移动与视图</h4>
+      ${row(K('W A S D') + ' / ' + K('↑ ← ↓ →'), '移动地图（按住连续移动）')}
+      ${row(K('Shift'), '配合移动 / 缩放：加速')}
+      ${row(K('Q') + ' ' + K('E') + ' / ' + K('-') + ' ' + K('='), '缩小 / 放大（以鼠标为中心）')}
+      ${row('滚轮', '缩放；触控板双指：移动；双指捏合：缩放')}
+      ${row(K('空格') + ' + 拖动 / 右键或中键拖动', '拖动地图')}
+      ${row(K('Home'), '回到全图')}
+      ${row(K('Tab'), '隐藏 / 显示右侧面板')}
+      ${row(K('Alt') + ' + ' + K('1') + K('2') + K('3'), '切换显示 一级 / 二级 / 三级 行政区')}
+      <h4>工具</h4>
+      ${row(K('1') + ' / ' + K('B'), '彩笔')}${row(K('2') + ' / ' + K('V'), '选择')}
+      ${row(K('3') + ' / ' + K('L'), '陆海')}${row(K('4') + ' / ' + K('T'), '地貌 / 气候')}
+      ${row(K('5') + ' / ' + K('F'), '森林')}${row(K('6') + ' / ' + K('R'), '河流')}
+      ${row(K('7') + ' / ' + K('N'), '国家')}${row(K('8') + ' / ' + K('P'), '行政区')}
+      ${row(K('9') + ' / ' + K('C'), '城市')}${row(K('0') + ' / ' + K('J'), '军队')}
+      ${row(K('H'), '平移')}${row(K('K'), '线条')}${row(K('U'), '进军箭头')}${row(K('M'), '标记')}${row(K('X'), '文字')}
+      <h4>画笔</h4>
+      ${row(K('[') + ' ' + K(']'), '笔刷变小 / 变大（加 Shift 每次 5）')}
+      ${row(K('Alt') + ' + 滚轮', '调笔刷大小')}
+      ${row(K('Z'), '切换 涂色 / 橡皮')}
+      ${row(K('G'), '切换 笔刷 / 油漆桶')}
+      ${row('按住 ' + K('Alt') + ' 涂', '临时不受锁定限制')}
+      ${row(K('Enter') + ' / ' + K('Esc'), 'AI 修边：修整 / 保留原样')}
+      <h4>编辑与文件</h4>
+      ${row(K(mod) + ' + ' + K('Z'), '撤销')}${row(K(mod) + ' + ' + K('Shift') + ' + ' + K('Z') + ' / ' + K(mod) + ' + ' + K('Y'), '重做')}
+      ${row(K('Delete') + ' / ' + K('Backspace'), '删除选中的对象')}
+      ${row(K('Esc'), '取消高亮 → 取消选中 → 回到选择工具')}
+      ${row('双击', '改名；折线上双击增删节点')}
+      ${row(K(mod) + ' + ' + K('S'), '保存为 JSON')}${row(K(mod) + ' + ' + K('O'), '打开 JSON')}${row(K(mod) + ' + ' + K('E'), '导出图片')}
+    </div>
+    <div class="help"><p><b>基本流程：</b>选「彩笔」直接涂色，同色区域自动成为一块势力；在「国家」页给它起名、选行政区划制度、一键划分行政区；再放城市、军队、进军箭头和文字。地图会自动保存在浏览器里。</p></div>
     <div class="row end"><button class="btn pri" data-close>好的</button></div>`);
+  };
 
   const loaded = new Set();
   const loadFont = (f) => {
