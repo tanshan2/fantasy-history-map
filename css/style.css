@@ -167,3 +167,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .terr{background:rgba(255,214,110,.07);border:1px solid rgba(255,214,110,.25);border-radius:8px;padding:6px 8px;margin:8px 0}
 .terr .row{margin:2px 0;flex-wrap:wrap}.terr .row .btn{margin-left:auto}
 .exl{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+body.hide-panel #panel{display:none}
+#keyHint{position:absolute;right:56px;bottom:10px;background:rgba(20,26,36,.82);padding:3px 9px;border-radius:6px;color:var(--muted);font-size:12px;pointer-events:none}
+.keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:6px 18px}
+.keys h4{grid-column:1/-1;margin:8px 0 2px;color:var(--gold)}
+.keys div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--line);padding:3px 0}
+kbd{display:inline-block;min-width:22px;text-align:center;padding:1px 6px;border:1px solid #556;border-bottom-width:2px;border-radius:5px;background:#232b3a;color:#f1e6cc;font-family:inherit;font-size:12px;margin:0 1px}
