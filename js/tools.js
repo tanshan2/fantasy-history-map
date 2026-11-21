@@ -45,6 +45,7 @@
   const wheel = (e) => {
     e.preventDefault();
     const [sx, sy] = pos(e);
+    if (e.altKey && BRUSH.includes(T.cur)) { T.opt.brush = U.clamp(T.opt.brush - Math.sign(e.deltaY) * (e.shiftKey ? 3 : 1), 0.5, 40); App.UI.refreshTool(); App.R.request(); return; }
     const v = App.R.view;
     if (e.ctrlKey || e.metaKey) zoomAt(sx, sy, Math.exp(-e.deltaY * 0.01));
     else if (e.deltaMode === 0 && (Math.abs(e.deltaX) > 0 || Math.abs(e.deltaY) < 50)) { v.ox -= e.deltaX; v.oy -= e.deltaY; App.R.request(); }
@@ -316,6 +317,7 @@
     if (['city', 'army', 'marker', 'text'].includes(T.cur)) place(wx, wy);
   };
   const move = (e) => {
+    T.mouseScreen = pos(e);
     if (T.altDown !== e.altKey) { T.altDown = e.altKey; App.R.request(); }
     const [sx, sy] = pos(e), [wx, wy] = App.R.toWorld(sx, sy);
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, [sx, sy]);
@@ -384,21 +386,74 @@
     }
     if (h && (h.kind === 'cities' || h.kind === 'texts' || h.kind === 'armies' || h.kind === 'nationLabel' || h.kind === 'provLabel')) App.UI.focusField(h.kind === 'texts' ? 'text' : 'name');
   };
+  // ---------- 键盘：电脑操作 ----------
+  // 按住 WASD / 方向键 连续平移，Q/E 连续缩放（以鼠标为中心），Shift 加速
+  const held = new Set(); let panRaf = 0, lastT = 0;
+  const DIRS = { KeyW: [0, 1], ArrowUp: [0, 1], KeyS: [0, -1], ArrowDown: [0, -1], KeyA: [1, 0], ArrowLeft: [1, 0], KeyD: [-1, 0], ArrowRight: [-1, 0] };
+  const ZOOMK = { KeyQ: -1, KeyE: 1, Minus: -1, Equal: 1, NumpadSubtract: -1, NumpadAdd: 1 };
+  const tick = (t) => {
+    if (!held.size) { panRaf = 0; lastT = 0; return; }
+    const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 1 / 60; lastT = t;
+    let dx = 0, dy = 0, dz = 0;
+    held.forEach((k) => { if (DIRS[k]) { dx += DIRS[k][0]; dy += DIRS[k][1]; } if (ZOOMK[k]) dz += ZOOMK[k]; });
+    const fast = T.shiftDown ? 2.6 : 1, v = App.R.view;
+    if (dx || dy) { const sp = 760 * fast * dt, n = Math.hypot(dx, dy); v.ox += (dx / n) * sp; v.oy += (dy / n) * sp; }
+    if (dz) {
+      const r = canvas.getBoundingClientRect(), ms = T.mouseScreen;
+      const [zx, zy] = ms && ms[0] >= 0 && ms[1] >= 0 && ms[0] <= r.width && ms[1] <= r.height ? ms : [r.width / 2, r.height / 2];
+      zoomAt(zx, zy, Math.exp(dz * 1.7 * fast * dt));
+    }
+    App.R.request(); App.UI.status();
+    panRaf = requestAnimationFrame(tick);
+  };
+  const startMove = () => { if (!panRaf) panRaf = requestAnimationFrame(tick); };
+  window.addEventListener('blur', () => { held.clear(); T.shiftDown = false; spaceDown = false; });
+  window.addEventListener('keyup', (e) => { held.delete(e.code); if (e.key === 'Shift') T.shiftDown = false; });
+
+  // 数字键选工具
+  T.NUM_TOOLS = ['color', 'select', 'land', 'terrain', 'forest', 'river', 'nation', 'prov', 'city', 'army'];
+  // 字母选工具（避开 WASD / Q / E）
+  T.KEY_TOOLS = { b: 'color', v: 'select', h: 'pan', l: 'land', t: 'terrain', f: 'forest', r: 'river', n: 'nation', p: 'prov', k: 'line', c: 'city', j: 'army', u: 'arrow', m: 'marker', x: 'text' };
   const key = (e) => {
+    if (e.key === 'Shift') T.shiftDown = true;
     const tag = (e.target.tagName || '').toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
     if (App.Refine && App.Refine.isPending() && (e.key === 'Escape' || e.key === 'Enter')) return;
-    const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? App.redo() : App.undo(); return; }
-    if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); App.redo(); return; }
-    if (mod) return;
+    const famOpen = document.getElementById('famModal') && !document.getElementById('famModal').hidden;
+    const modalOpen = !document.getElementById('modal').hidden;
+    if (modalOpen || famOpen) { if (e.key === 'Escape') { if (famOpen) App.Family.hide(); else document.getElementById('modal').hidden = true; } return; }
+    const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
+    // —— 带 Ctrl/⌘ 的组合键 ——
+    if (mod) {
+      if (k === 'z') { e.preventDefault(); e.shiftKey ? App.redo() : App.undo(); }
+      else if (k === 'y') { e.preventDefault(); App.redo(); }
+      else if (k === 's') { e.preventDefault(); App.UI.saveJson(); App.UI.toast('已保存为 JSON 文件'); }
+      else if (k === 'o') { e.preventDefault(); document.getElementById('fileJson').click(); }
+      else if (k === 'e') { e.preventDefault(); App.UI.exportDialog(); }
+      return;
+    }
+    // —— 移动 / 缩放（按住连续） ——
+    if ((DIRS[e.code] || ZOOMK[e.code]) && !e.altKey) { e.preventDefault(); held.add(e.code); startMove(); return; }
+    // —— Alt + 1/2/3：切换省/道/府显示 ——
+    if (e.altKey && /^Digit[123]$/.test(e.code)) {
+      e.preventDefault(); const lv = 'lv' + e.code.slice(5); App.S.meta[lv] = !App.S.meta[lv];
+      App.UI.syncLv(); App.R.request(); App.autosave(); App.UI.toast(App.LEVELS[+e.code.slice(5)].full + (App.S.meta[lv] ? ' 显示' : ' 隐藏')); return;
+    }
     if (e.code === 'Space') { spaceDown = true; e.preventDefault(); return; }
-    if (e.key === 'Delete' || e.key === 'Backspace') { T.deleteSel(); return; }
-    if (e.key === 'Escape') { drag = null; if (T.hl) { T.highlight(0); return; } T.set('select'); return; }
-    if (e.key === '[') { T.opt.brush = Math.max(0.5, T.opt.brush - 1); App.UI.refreshTool(); App.R.request(); return; }
-    if (e.key === ']') { T.opt.brush = Math.min(40, T.opt.brush + 1); App.UI.refreshTool(); App.R.request(); return; }
-    const map = { g: 'color', v: 'select', h: 'pan', l: 'land', t: 'terrain', f: 'forest', r: 'river', n: 'nation', p: 'prov', b: 'line', c: 'city', a: 'army', w: 'arrow', m: 'marker', x: 'text' };
-    if (map[e.key.toLowerCase()]) T.set(map[e.key.toLowerCase()]);
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); T.deleteSel(); return; }
+    if (e.key === 'Escape') { drag = null; if (T.hl) { T.highlight(0); return; } if (T.sel) { T.select(null); return; } T.set('select'); return; }
+    if (e.key === 'Home') { e.preventDefault(); App.R.fit(); return; }
+    if (e.key === 'Tab') { e.preventDefault(); document.body.classList.toggle('hide-panel'); setTimeout(App.R.resize, 30); return; }
+    if (e.key === '?' || e.key === 'F1') { e.preventDefault(); App.UI.help(); return; }
+    // —— 笔刷 ——
+    const step = e.shiftKey ? 5 : 1;
+    if (e.key === '[' || e.key === '{') { T.opt.brush = Math.max(0.5, T.opt.brush - step); App.UI.refreshTool(); App.R.request(); return; }
+    if (e.key === ']' || e.key === '}') { T.opt.brush = Math.min(40, T.opt.brush + step); App.UI.refreshTool(); App.R.request(); return; }
+    if (k === 'z' && ['color', 'nation', 'prov'].includes(T.cur)) { T.opt.erase = !T.opt.erase; App.UI.refreshTool(); App.UI.toast(T.opt.erase ? '橡皮' : '涂色'); return; }
+    if (k === 'g' && ['color', 'nation', 'prov'].includes(T.cur)) { T.opt.fill = !T.opt.fill; App.UI.refreshTool(); App.R.request(); App.UI.toast(T.opt.fill ? '油漆桶' : '笔刷'); return; }
+    // —— 选工具 ——
+    if (/^Digit[0-9]$/.test(e.code)) { const i = (+e.code.slice(5) + 9) % 10; if (T.NUM_TOOLS[i]) T.set(T.NUM_TOOLS[i]); return; }
+    if (T.KEY_TOOLS[k]) T.set(T.KEY_TOOLS[k]);
   };
 
   // ---------- 覆盖层（光标、预览、选中） ----------
