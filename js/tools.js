@@ -4,7 +4,7 @@
   const T = (App.Tools = {
     cur: 'select', activeNation: 0, activeProv: 0, sel: null, mouse: null, hl: 0,
     opt: { brush: 5, land: 'land', terrain: 5, forest: 1, fill: false, erase: false, cityType: 'medium', armyType: 'infantry', strength: '1万',
-      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, lockOther: false, lockRiver: false, lockMtn: false, lockSea: false, askRefine: true, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28 },
+      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, lockOther: false, lockRiver: false, lockMtn: false, lockSea: false, askRefine: true, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28, wallType: 'ming', wallTowers: true, wallRidge: true, wallPass: true },
   });
   const BRUSH = ['color', 'land', 'terrain', 'forest', 'nation', 'prov'];
   // 彩色画笔：同一种颜色 = 同一块势力（没有就自动建一个未命名的）
@@ -14,7 +14,7 @@
     if (!n) n = App.Ops.addNation({ name: '', color: col, culture: (App.UI && App.UI.newCulture) || 'huaxia' });
     return n.id;
   };
-  const DRAWLINE = ['river', 'line', 'arrow'];
+  const DRAWLINE = ['river', 'line', 'arrow', 'wall'];
   let canvas, drag = null, spaceDown = false, pointers = new Map(), pinch = null;
 
   T.init = (cv) => {
@@ -370,6 +370,12 @@
       const S = App.S;
       if (T.cur === 'river') S.rivers.push({ id: App.nid(), pts, width: T.opt.riverWidth });
       else if (T.cur === 'line') S.lines.push({ id: App.nid(), pts, style: T.opt.lineStyle });
+      else if (T.cur === 'wall') {
+        const wp = T.opt.wallRidge ? App.Walls.snapRidge(pts) : pts;
+        S.lines.push({ id: App.nid(), pts: wp, style: 'wall', wall: T.opt.wallType, towers: T.opt.wallTowers, name: '' });
+        const ps = T.opt.wallPass ? App.Walls.autoPasses(wp) : [];
+        App.UI.toast(ps.length ? '长城已建成，新设关隘：' + ps.map((k) => k.name).join('、') : '长城已建成');
+      }
       else if (T.cur === 'arrow') S.arrows.push({ id: App.nid(), pts, nation: T.activeNation, width: T.opt.arrowWidth });
       App.changed({});
     }
@@ -414,7 +420,7 @@
   // 数字键选工具
   T.NUM_TOOLS = ['color', 'select', 'land', 'terrain', 'forest', 'river', 'nation', 'prov', 'city', 'army'];
   // 字母选工具（避开 WASD / Q / E）
-  T.KEY_TOOLS = { b: 'color', v: 'select', h: 'pan', l: 'land', t: 'terrain', f: 'forest', r: 'river', n: 'nation', p: 'prov', k: 'line', c: 'city', j: 'army', u: 'arrow', m: 'marker', x: 'text' };
+  T.KEY_TOOLS = { b: 'color', v: 'select', h: 'pan', l: 'land', t: 'terrain', f: 'forest', r: 'river', n: 'nation', p: 'prov', k: 'line', y: 'wall', c: 'city', j: 'army', u: 'arrow', m: 'marker', x: 'text' };
   const key = (e) => {
     if (e.key === 'Shift') T.shiftDown = true;
     const tag = (e.target.tagName || '').toLowerCase();
@@ -471,6 +477,7 @@
     if (drag && drag.type === 'line' && drag.pts.length > 1) {
       const S = App.S;
       if (T.cur === 'river') App.R.drawRiver(c, { pts: drag.pts, width: T.opt.riverWidth }, (px) => (px * Math.pow(s, 0.5)) / s);
+      else if (T.cur === 'wall') App.Walls.draw(c, { pts: drag.pts, wall: T.opt.wallType, towers: T.opt.wallTowers }, (px) => (px * Math.pow(s, 0.5)) / s, s);
       else { c.beginPath(); drag.pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.strokeStyle = T.cur === 'arrow' ? (App.nation(T.activeNation)?.color || '#c00') : '#7a2a1a'; c.lineWidth = (T.cur === 'arrow' ? T.opt.arrowWidth * 0.6 : 2 / s); c.globalAlpha = 0.7; c.stroke(); c.globalAlpha = 1; }
     }
     const o = T.selObj(); if (!o) return;
