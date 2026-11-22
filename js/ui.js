@@ -15,6 +15,7 @@
     nation: '<path d="M5 21V3M5 4h12l-3 4 3 4H5" />',
     prov: '<rect x="3" y="3" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 11h8V3M11 11l5 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2"/>',
     line: '<path d="M3 18L9 8l5 7 7-11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="4 2"/>',
+    wall: '<path d="M2 17h20v4H2zM3 13h3v4H3zM8 13h3v4H8zM13 13h3v4h-3zM18 13h3v4h-3zM9 6h6v11H9z"/><path d="M9 4h1.5v2H9zM11.25 4h1.5v2h-1.5zM13.5 4H15v2h-1.5z"/>',
     city: '<path d="M3 21V10l4-3 4 3v11zM13 21V5l4-2 4 2v16z"/>',
     army: '<rect x="3" y="6" width="18" height="12" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 6l18 12M21 6L3 18" stroke="currentColor" stroke-width="1.6"/>',
     arrow: '<path d="M3 17c4-1 8-5 11-9l-3-1 8-4-1 9-2-3c-3 4-7 8-12 10z"/>',
@@ -22,7 +23,7 @@
     text: '<path d="M4 5h16v3h-6v12h-4V8H4z"/>',
   };
   const TOOLS = [['color', '彩笔', '1 / B'], ['select', '选择', '2 / V'], ['pan', '平移', 'H'], ['land', '陆海', '3 / L'], ['terrain', '地貌', '4 / T'], ['forest', '森林', '5 / F'], ['river', '河流', '6 / R'],
-    ['nation', '国家', '7 / N'], ['prov', '行政区', '8 / P'], ['line', '线条', 'K'], ['city', '城市', '9 / C'], ['army', '军队', '0 / J'], ['arrow', '进军', 'U'], ['marker', '标记', 'M'], ['text', '文字', 'X']];
+    ['nation', '国家', '7 / N'], ['prov', '行政区', '8 / P'], ['line', '线条', 'K'], ['wall', '长城', 'Y'], ['city', '城市', '9 / C'], ['army', '军队', '0 / J'], ['arrow', '进军', 'U'], ['marker', '标记', 'M'], ['text', '文字', 'X']];
 
   UI.init = () => {
     $('#tools').innerHTML = TOOLS.map(([id, n, k]) => `<button class="tool" data-tool="${id}" title="${n}（${k}）"><svg viewBox="0 0 24 24" fill="currentColor">${ICON[id]}</svg><span>${n}</span></button>`).join('');
@@ -94,6 +95,7 @@
       case 'nation': h = nationPick() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
       case "prov": h = nationPick() + `<label>行政区 <select data-act="activeProv"><option value="0">— 选择 —</option>${UI.provOptions()}</select></label>` + (o.erase ? chips("provLevel", [{ id: 1, name: "擦省" }, { id: 2, name: "擦道" }, { id: 3, name: "擦府" }]) : "") + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
       case 'line': h = chips('lineStyle', App.LINE_STYLES) + '<span class="hint">按住拖动绘制</span>'; break;
+      case 'wall': h = chips('wallType', App.Walls.TYPES) + `<button class="chip lock ${o.wallTowers ? 'on' : ''}" data-lock="wallTowers">敌楼 / 烽燧</button><button class="chip lock ${o.wallRidge ? 'on' : ''}" data-lock="wallRidge">沿山脊吸附</button><button class="chip lock ${o.wallPass ? 'on' : ''}" data-lock="wallPass">穿河过路自动设关</button>` + '<span class="hint">按住拖动画长城，松开后可在「选择」工具里改样式、起名</span>'; break;
       case 'city': h = chips('cityType', App.CITY_TYPES) + '<span class="hint">点击放置，名字按所在国文明自动生成</span>'; break;
       case "army": h = nationPick() + ["步兵", "骑兵", "其他"].map((g) => `<span class="grp">${g}</span>` + chips("armyType", App.ARMY_TYPES.filter((a) => a.g === g))).join("") + `<label>兵力 <input type="text" size="5" value="${U.esc(o.strength)}" data-str="strength"></label>`; break;
       case 'arrow': h = nationPick() + `<label class="rng">宽度 <input type="range" min="4" max="40" step="1" value="${o.arrowWidth}" data-num="arrowWidth"><b>${o.arrowWidth}</b></label>`; break;
@@ -296,15 +298,15 @@
     if (k === 'markers') h += inp('name', '名称') + sel_('type', '类型', App.MARKER_TYPES);
     if (k === 'texts') h += field('文字', `<textarea data-o="text" rows="3">${U.esc(o.text)}</textarea>`) + inp('size', '字号', 'range', 'min="6" max="160"') + inp('angle', '角度', 'range', 'min="-90" max="90"') + inp('spacing', '字距', 'range', 'min="0" max="3" step="0.05"') + inp('color', '颜色', 'color') + field('', `<label class="ck"><input type="checkbox" data-ock="box" ${o.box ? 'checked' : ''}> 标题框</label><label class="ck"><input type="checkbox" data-ock="italic" ${o.italic ? 'checked' : ''}> 斜体</label>`);
     if (k === 'rivers') h += inp('name', '名称') + inp('width', '河口宽度', 'range', 'min="0.6" max="8" step="0.2"') + '<p class="muted">拖动黄色节点修改形状，双击线段加节点，双击节点删节点。</p>';
-    if (k === 'lines') h += sel_('style', '样式', App.LINE_STYLES) + inp('color', '颜色(可选)', 'color') + '<p class="muted">拖动节点修改，双击增删节点。</p>';
+    if (k === 'lines') h += sel_('style', '样式', App.LINE_STYLES) + (o.style === 'wall' ? inp('name', '名称（可选，如「秦长城」）') + sel_('wall', '长城样式', App.Walls.TYPES) + field('敌楼 / 烽燧', `<select data-o="towers" data-bool="1"><option value="true" ${o.towers !== false ? 'selected' : ''}>显示</option><option value="false" ${o.towers === false ? 'selected' : ''}>不显示</option></select>`) : '') + inp('color', '颜色(可选)', 'color') + '<p class="muted">拖动节点修改，双击增删节点。</p>';
     if (k === 'arrows') h += nat('nation') + inp('width', '宽度', 'range', 'min="4" max="40"');
     if (k === "nationLabel") h += inp("name", "国名") + "<p class=\"muted\">国名固定显示在领土最宽处。</p>";
     if (k === "provLabel") h += inp("name", "名称") + `<p class="muted">${App.levelName(App.nation(o.nation), o.level || 1)}（${["", "一", "二", "三"][o.level || 1]}级），名字固定在区域内。</p>`;
     box.innerHTML = h;
     box.querySelectorAll('[data-o]').forEach((i) => {
       i.onfocus = () => App.pushUndo();
-      i.oninput = () => { let v = i.value; if (i.type === 'range' || i.dataset.numv) v = +v; o[i.dataset.o] = v; App.R.request(); };
-      i.onchange = () => { App.changed({}); if (k === 'nationLabel') UI.refresh(); };
+      i.oninput = () => { let v = i.value; if (i.type === 'range' || i.dataset.numv) v = +v; if (i.dataset.bool) v = v === 'true'; o[i.dataset.o] = v; App.R.request(); };
+      i.onchange = () => { App.changed({}); if (k === 'nationLabel') UI.refresh(); if (i.dataset.o === 'style') UI.showSelection(); };
     });
     box.querySelectorAll('[data-ock]').forEach((i) => (i.onchange = () => { App.pushUndo(); o[i.dataset.ock] = i.checked; App.changed({}); }));
     box.querySelector('[data-sact=del]').onclick = () => {
@@ -403,7 +405,7 @@
       ${row(K('5') + ' / ' + K('F'), '森林')}${row(K('6') + ' / ' + K('R'), '河流')}
       ${row(K('7') + ' / ' + K('N'), '国家')}${row(K('8') + ' / ' + K('P'), '行政区')}
       ${row(K('9') + ' / ' + K('C'), '城市')}${row(K('0') + ' / ' + K('J'), '军队')}
-      ${row(K('H'), '平移')}${row(K('K'), '线条')}${row(K('U'), '进军箭头')}${row(K('M'), '标记')}${row(K('X'), '文字')}
+      ${row(K('H'), '平移')}${row(K('K'), '线条')}${row(K('Y'), '长城')}${row(K('U'), '进军箭头')}${row(K('M'), '标记')}${row(K('X'), '文字')}
       <h4>国家</h4>
       ${row(K('I'), '国家档案（当前高亮或选中的国家）')}${row(K('O'), '国力排名')}${row(K('Shift') + ' / ' + K('Ctrl') + ' + 点击', '多选国家（地图或列表），批量设附庸、改国体等')}${row(K('Esc'), '清空多选')}
       <h4>画笔</h4>
