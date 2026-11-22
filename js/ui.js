@@ -155,7 +155,7 @@
         <h4 style="margin-top:10px">自动划分行政区（${[1, 2, 3].slice(0, App.maxLevel(an)).map((l) => App.levelName(an, l)).join(" → ")}）</h4>
         <div class="row wrap"><label class="inline">分成 <input type="number" min="1" max="40" value="${UI.provK || ""}" placeholder="自动" data-act="provK" style="width:58px"> 个${App.levelName(an, 1)}，下级按制度比例自动细分</label></div>
         <div class="row wrap"><button class="btn" data-act="autoProv">重新划分全部</button><button class="btn" data-act="autoSub">保留${App.levelName(an, 1)}，只细分下级</button></div>
-        <div class="row wrap"><button class="btn" data-act="autoCity">自动生成城市</button><button class="btn danger" data-act="delNation">删除国家</button></div></div>`;
+        <div class="row wrap"><button class="btn" data-act="autoCity" title="数量看可用土地，大小看地貌、气候、河流、海岸">按地理补充城市</button><button class="btn" data-act="autoArmy">按国力生成军队</button><button class="btn danger" data-act="delNation">删除国家</button></div></div>`;
     }
     h += `<div class="row wrap"><button class="btn" data-act="autoAll">一键划分所有国家的行政区</button><button class="btn" data-act="recolor">相邻国家自动配色</button><button class="btn" data-act="family">家族 / 族谱…</button><button class="btn" data-act="power">国力排名</button></div>`;
     return h;
@@ -251,7 +251,8 @@
     act('adminSys', (b) => { const ns = App.ADMIN_SYS[b.value], has = S.provinces.some((p) => p.nation === an.id); if (has && !confirm('切换为「' + ns.name + '」？\n已有行政区会保留地名、改成新的级别名称' + (ns.levels < 3 ? '，并删除第三级' : '') + '。')) { UI.refresh(); return; } App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.setAdminSys(an, b.value); App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('autoAll', () => { const redo = App.S.provinces.length && confirm('已有行政区的国家也重新划分吗？\n确定＝全部重新划分，取消＝只划分还没有行政区的'); App.pushUndo(['prov', 'prov2', 'prov3']); const k = App.Ops.autoAllProvinces(redo); App.changed({ pol: true, ui: true }); UI.toast('已划分 ' + k + ' 个国家'); });
     act("autoProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, UI.provK || 0); App.changed({ pol: true, ui: true }); });
-    act('autoCity', () => { App.pushUndo(); App.Ops.autoCities(an.id); App.changed({ ui: true }); });
+    act('autoCity', () => { App.pushUndo(); const k = App.Ops.autoCities(an.id).length; App.changed({ ui: true }); UI.toast(k ? '新增 ' + k + ' 座城市' : '可用土地有限，没有合适的新城址'); });
+    act('autoArmy', () => { App.pushUndo(); const k = App.Polity.genArmies(an).length; App.changed({ ui: true }); UI.toast(k ? '生成 ' + k + ' 支部队' : '兵力已足够'); });
     act('delNation', () => { if (!confirm(`删除「${an.name}」？（可撤销）`)) return; App.pushUndo(["owner", "prov", "prov2", "prov3"]); App.Ops.deleteNation(an.id); T().activeNation = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('recolor', () => { App.pushUndo(); App.Ops.recolor(); App.changed({ pol: true, ui: true }); });
     act("addSub", () => { App.pushUndo(); const pr = App.Ops.addProvince(an.id, null, (ap.level || 1) + 1, ap.id); UI.provOpen = UI.provOpen || {}; UI.provOpen[ap.id] = true; T().activeProv = pr.id; T().set("prov"); App.changed({ ui: true }); });
