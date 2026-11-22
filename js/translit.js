@@ -24,6 +24,10 @@
     vik: '维克', gard: '加德', fjord: '菲奥德', stad: '斯塔德', holm: '霍尔姆', sund: '松德', ness: '内斯', land: '兰', dal: '达尔', by: '比',
     more: '莫尔', dale: '代尔', wen: '文', ock: '奥克', avon: '埃文', ross: '罗斯', lyn: '林', iel: '伊尔',
     abad: '阿巴德', iya: '耶', rat: '拉特',
+    furt: '富特', bruck: '布吕克', bach: '巴赫', stein: '施泰因', hafen: '哈芬', munde: '明德', strand: '施特兰德', hain: '海因',
+    bridge: '布里奇', hill: '希尔', crag: '克拉格', fell: '费尔', haven: '黑文', port: '波特', wood: '伍德', hurst: '赫斯特',
+    brod: '布罗德', gorsk: '戈尔斯克', gora: '戈拉', morsk: '莫尔斯克', lesk: '列斯克', les: '列斯', pol: '波尔',
+    os: '奥斯', fjell: '菲耶尔', havn: '哈文', skog: '斯科格', lund: '隆德', ben: '本',
   }).sort((a, b) => b[0].length - a[0].length);
   // 音节表：声母 → [a, e, i, o, u, 单辅音]
   const SYL = {
@@ -99,6 +103,7 @@
 
   // ---- 让西方文明的所有命名直接输出中文 ----
   const N = App.Names, latin = N.groups.latin, orig = N.gen, origGiven = N.given, origFB = N.familyBase;
+  N.genRaw = orig;
   N.gen = (cul, kind, r) => { const s = orig(cul, kind, r); return latin.includes(cul) ? TR.name(s) : s; };
   N.given = (cul, female, r) => { const s = origGiven(cul, female, r); return latin.includes(cul) ? TR.name(s) : s; };
   N.familyBase = (cul, r) => { const s = origFB(cul, r); return latin.includes(cul) ? TR.name(s) : s; };
