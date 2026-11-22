@@ -8,7 +8,7 @@
   R.STYLES = {
     parchment: { name: '羊皮纸（偏暗做旧）', ocean: '#304a66', seaAlpha: 1, vignette: 'rgba(5,10,20,0.45)', grid: 'rgba(200,215,225,0.12)', aged: true,
       glow: [150, 186, 200], glowD: 8, glowA: 0.85, glowP: 1.6, nationA: 0.78, band: 0.9, paper: 1, tintA: 1,
-      prov: ['rgba(60,22,12,.9)', 'rgba(35,20,10,.7)', 'rgba(35,20,10,.55)'], provW: [2.4, 1.15, 0.8], provDash: [null, [4, 2.5], [1.2, 2]], provHalo: 'rgba(245,230,200,.55)',
+      prov: ['rgba(60,22,12,.9)', 'rgba(35,20,10,.7)', 'rgba(35,20,10,.38)'], provW: [2.4, 1.15, 0.6], provDash: [null, [4, 2.5], null], provHalo: 'rgba(245,230,200,.55)',
       borderShade: -0.55, borderW: 1.3, coast: '#1b2f45', coastW: 1.7, river: '#3f6f8a',
       label: (n) => U.rgba(U.shade(n.color, -0.8), 0.9), labelHalo: 'rgba(240,228,200,0.35)', provLabel: null, city: '#2e2218', cityHalo: 'rgba(236,222,190,.85)', ink: false },
     vivid: { name: '鲜明（游戏地图风）', ocean: '#3a86e0', seaAlpha: 0.75, vignette: 'rgba(10,40,110,0.25)', grid: 'rgba(255,255,255,0.13)',
