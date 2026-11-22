@@ -95,7 +95,7 @@
       case 'nation': h = nationPick() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
       case "prov": h = nationPick() + `<label>行政区 <select data-act="activeProv"><option value="0">— 选择 —</option>${UI.provOptions()}</select></label>` + (o.erase ? chips("provLevel", [{ id: 1, name: "擦省" }, { id: 2, name: "擦道" }, { id: 3, name: "擦府" }]) : "") + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
       case 'line': h = chips('lineStyle', App.LINE_STYLES) + '<span class="hint">按住拖动绘制</span>'; break;
-      case 'wall': h = chips('wallType', App.Walls.TYPES) + `<button class="chip lock ${o.wallTowers ? 'on' : ''}" data-lock="wallTowers">敌楼 / 烽燧</button><button class="chip lock ${o.wallRidge ? 'on' : ''}" data-lock="wallRidge">沿山脊吸附</button><button class="chip lock ${o.wallPass ? 'on' : ''}" data-lock="wallPass">穿河过路自动设关</button>` + '<span class="hint">按住拖动画长城，松开后可在「选择」工具里改样式、起名</span>'; break;
+      case 'wall': h = chips('wallType', App.Walls.TYPES) + `<button class="chip lock ${o.wallTowers ? 'on' : ''}" data-lock="wallTowers">敌楼 / 烽燧</button><button class="chip lock ${o.wallRidge ? 'on' : ''}" data-lock="wallRidge">画完询问沿山脊修整</button><button class="chip lock ${o.wallPass ? 'on' : ''}" data-lock="wallPass">穿河过路自动设关</button>` + '<span class="hint">按住拖动画长城，松开后可在「选择」工具里改样式、起名</span>'; break;
       case 'city': h = chips('cityType', App.CITY_TYPES) + '<span class="hint">点击放置，名字按所在国文明自动生成</span>'; break;
       case "army": h = nationPick() + ["步兵", "骑兵", "其他"].map((g) => `<span class="grp">${g}</span>` + chips("armyType", App.ARMY_TYPES.filter((a) => a.g === g))).join("") + `<label>兵力 <input type="text" size="5" value="${U.esc(o.strength)}" data-str="strength"></label>`; break;
       case 'arrow': h = nationPick() + `<label class="rng">宽度 <input type="range" min="4" max="40" step="1" value="${o.arrowWidth}" data-num="arrowWidth"><b>${o.arrowWidth}</b></label>`; break;
@@ -450,13 +450,13 @@
   };
   UI.syncLv = () => {
     document.querySelectorAll('#lvBtns [data-lv]').forEach((b) => b.classList.toggle('on', !!App.S.meta['lv' + b.dataset.lv]));
-    document.querySelectorAll('#lvBtns [data-mode]').forEach((b) => b.classList.toggle('on', (App.S.meta.mapMode || 'pol') === b.dataset.mode));
+    document.querySelectorAll('#lvBtns [data-mode]').forEach((b) => b.classList.toggle('on', (App.S.meta.mapView || 'all') === b.dataset.mode));
   };
   UI.initLv = () => {
     const box = document.getElementById('lvBtns'); if (!box) return;
     box.innerHTML = '<span>地图</span>' + [['pol', '政区'], ['phys', '地形'], ['all', '综合']].map(([k, nm]) => `<button class="chip" data-mode="${k}" title="${{ pol: '只看国家和行政区，不画山、森林、河流', phys: '只看山、森林、河流，国家只画虚线边界', all: '全部叠在一起' }[k]}">${nm}</button>`).join('') + '<span class="sep"></span><span>行政区</span>' + [1, 2, 3].map((lv) => `<button class="chip" data-lv="${lv}">${["", "一级", "二级", "三级"][lv]}</button>`).join("");
     box.onclick = (e) => {
-      const md = e.target.closest('[data-mode]'); if (md) { App.S.meta.mapMode = md.dataset.mode; App.Geo.dirtyPol = true; UI.syncLv(); App.R.request(); App.autosave(); UI.toast({ pol: '政区图：不画山、森林、河流', phys: '地形图：只看山川河流森林', all: '综合：全部显示' }[md.dataset.mode]); return; }
+      const md = e.target.closest('[data-mode]'); if (md) { App.S.meta.mapView = md.dataset.mode; App.Geo.dirtyPol = true; UI.syncLv(); App.R.request(); App.autosave(); UI.toast({ pol: '政区图：不画山、森林、河流', phys: '地形图：只看山川河流森林', all: '综合：全部显示' }[md.dataset.mode]); return; }
       const b = e.target.closest('[data-lv]'); if (!b) return;
       const k = 'lv' + b.dataset.lv;
       if (e.shiftKey || e.metaKey || e.ctrlKey) { [1, 2, 3].forEach((l) => (App.S.meta['lv' + l] = String(l) === b.dataset.lv)); }
