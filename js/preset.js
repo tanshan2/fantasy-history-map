@@ -237,12 +237,12 @@
   };
   App.Preset.asia = async () => {
     const S = await buildBase();
-    S.meta.name = '亚洲模板'; S.meta.year = 1; S.meta.vec = 'asia'; App.Templates.ensureVec('asia');
+    S.meta.name = '亚洲模板'; S.meta.year = 1; S.meta.vec = 'asia'; S.meta.geo = 'asia'; App.Templates.ensureVec('asia');
     App.undoStack.length = 0; App.redoStack.length = 0;
   };
   App.Preset.tianhan = async () => {
     const S = await buildBase();
-    S.meta.name = '天汉历626年'; S.meta.vec = 'asia'; App.Templates.ensureVec('asia');
+    S.meta.name = '天汉历626年'; S.meta.vec = 'asia'; S.meta.geo = 'asia'; App.Templates.ensureVec('asia');
     // 势力
     const nat = {}; Object.entries(NATIONS).forEach(([k, v]) => {
       const n = App.Ops.addNation({ name: v.name, color: v.color, culture: v.culture });
@@ -300,6 +300,19 @@
     App.Family.createFamily({ culture: 'huaxia', base: '刘', name: '东瀛刘氏', nation: nat.dongying.id, home: cid('大和'), color: '#f3cf6e' }, fr);
     App.Family.createFamily({ culture: 'steppe', nation: nat.xiyu.id, home: cid('碎叶'), color: '#f2a766' }, fr);
     App.Family.createFamily({ culture: 'persia', nation: nat.bosi.id, home: cid('泰西封'), color: '#d8c9a8' }, fr);
+    // 国体与宗藩：汉为帝国，三个刘姓国为汉的封国 / 藩属
+    const PO = App.Polity, famOf = (nm) => S.families.find((f) => f.name === nm);
+    Object.assign(nat.han, { rank: 'empire', founded: 1, dynasty: liu.id }); liu.ruling = nat.han.id; liu.house = '皇室';
+    Object.assign(nat.xiyu, { rank: 'khanate', founded: 402 }); Object.assign(nat.yeda, { rank: 'khanate', founded: 520 });
+    Object.assign(nat.bosi, { rank: 'empire', founded: 226 }); Object.assign(nat.tianzhu, { rank: 'empire', founded: 320 });
+    Object.assign(nat.linan, { rank: 'fief', fiefSys: 'han', fiefTitle: 'wang', overlord: nat.han.id, founded: 388 });
+    Object.assign(nat.yunmeng, { rank: 'fief', fiefSys: 'han', fiefTitle: 'wang', overlord: nat.han.id, founded: 471 });
+    Object.assign(nat.dongying, { rank: 'fief', fiefSys: 'tributary', fiefTitle: 'fanshu', overlord: nat.han.id, founded: 455 });
+    Object.assign(nat.liugui, { rank: 'tribe', founded: 300 });
+    [['linan', '临安刘氏'], ['dongying', '东瀛刘氏']].forEach(([k, fn]) => { const f = famOf(fn); if (f) { nat[k].dynasty = f.id; f.ruling = nat[k].id; f.house = PO.title(nat[k]).house; } });
+    PO.ensureAllDynasties(fr);
+    S.nations.forEach((n) => { const f = PO.dynasty(n); if (f) PO.crown(n, f); });
+    em.name = '刘昂'; em.position = '皇帝';
     App.undoStack.length = 0; App.redoStack.length = 0;
   };
 })();
