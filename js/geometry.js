@@ -162,8 +162,8 @@
     };
     G.provPaths = [null,
       lvEdges((a, b) => O[a] === O[b], P1),
-      lvEdges((a, b) => O[a] === O[b] && P1[a] === P1[b], P2),
-      lvEdges((a, b) => O[a] === O[b] && P2[a] === P2[b], P3)];
+      lvEdges((a, b) => O[a] === O[b], P2), // 每一级都画出完整的边界（上级界线隐藏时也不会断开）
+      lvEdges((a, b) => O[a] === O[b], P3)];
     G.provPath = G.provPaths[1];
     // 内侧色带
     const border = (c) => {
