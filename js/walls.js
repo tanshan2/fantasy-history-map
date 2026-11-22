@@ -73,7 +73,7 @@
   const RIDGE = { 5: 3, 6: 2.4, 4: 2 };
   WL.snapRidge = (pts, R = 3) => {
     const S = App.S, step = C * 2.5;
-    let p = U.resample(pts, step).map(([x, y]) => [x, y]);
+    let p = [pts[0].slice()].concat(U.resample(pts, step).map(([x, y]) => [x, y]));
     if (p.length < 2) return pts;
     p.push(pts[pts.length - 1].slice());
     p = p.map(([x, y], i) => {
