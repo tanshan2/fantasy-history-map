@@ -127,37 +127,192 @@
     horseArcher: 1.6, lancer: 1.6, camel: 1.3, elephant: 2.2, chariot: 1.4, siege: 1.2, navy: 1.0 };
   P.troopStr = (t) => (t >= 1e4 ? +(t / 1e4).toFixed(1) + ' 万' : t + ' 人');
 
+  // ---------- 土地丰饶度：地貌 × 气候 × 森林，河流与海岸加成 ----------
+  const TERR_F = { 2: 1, 3: 0.55, 4: 0.6, 5: 0.18, 6: 0.02, 7: 0.05, 8: 0.3, 9: 0.05 };
+  const CLIM_F = [0.8, 0.5, 0.95, 0.6, 0.08, 0.4, 0.85, 1, 0.95, 1, 0.6, 0.3, 0.05, 0, 0.25];
+  const FOR_F = [1, 0.85, 0.7, 0.6, 0.85, 0.75, 0.9];
+  P.TERR_F = TERR_F; P.CLIM_F = CLIM_F;
+  // 河流两侧约 2.5 格
+  P.riverMask = () => {
+    const S = App.S, C = App.CELL, m = new Uint8Array(N), R = 2.5;
+    S.rivers.forEach((rv) => {
+      const pts = rv.pts || []; for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[i + 1] || a, steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / C));
+        for (let s = 0; s <= steps; s++) {
+          const x = (a[0] + ((b[0] - a[0]) * s) / steps) / C, y = (a[1] + ((b[1] - a[1]) * s) / steps) / C;
+          for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) { if (dx * dx + dy * dy > R * R) continue; const cx = Math.floor(x + dx), cy = Math.floor(y + dy); if (cx >= 0 && cy >= 0 && cx < W && cy < H) m[cy * W + cx] = 1; }
+        }
+      }
+    });
+    return m;
+  };
+  const isCoast = (S, c) => { const x = c % W; return (x > 0 && S.terrain[c - 1] === 0) || (x < W - 1 && S.terrain[c + 1] === 0) || (c >= W && S.terrain[c - W] === 0) || (c < N - W && S.terrain[c + W] === 0); };
+  P.fertility = (c, rv) => {
+    const S = App.S, t = S.terrain[c]; if (t < 2) return 0;
+    let f = (TERR_F[t] ?? 0.5) * (CLIM_F[S.climate[c]] ?? 0.8) * (FOR_F[S.forest[c]] ?? 0.85);
+    if (rv && rv[c]) f = Math.min(1.25, f * 1.4 + 0.15);   // 大河冲积平原、绿洲
+    if (isCoast(S, c)) f = Math.min(1.25, f * 1.1 + 0.03);
+    return f;
+  };
+  // 整张图的丰饶度 + 邻近平均（半径约 4 格），用于选城址
+  P.fertMap = () => {
+    const rv = P.riverMask(), f = new Float32Array(N);
+    for (let c = 0; c < N; c++) f[c] = P.fertility(c, rv);
+    const tmp = new Float32Array(N), bl = new Float32Array(N), R = 4;
+    for (let y = 0; y < H; y++) { let s = 0; for (let x = -R; x < W; x++) { if (x + R < W) s += f[y * W + x + R]; if (x - R - 1 >= 0) s -= f[y * W + x - R - 1]; if (x >= 0) tmp[y * W + x] = s; } }
+    for (let x = 0; x < W; x++) { let s = 0; for (let y = -R; y < H; y++) { if (y + R < H) s += tmp[(y + R) * W + x]; if (y - R - 1 >= 0) s -= tmp[(y - R - 1) * W + x]; if (y >= 0) bl[y * W + x] = s / ((2 * R + 1) * (2 * R + 1)); } }
+    return { f, rv, bl };
+  };
+  P.CITY_PTS = { capital: 10, large: 6, port: 4, medium: 3, fortress: 2, small: 1.5, pass: 1.2, village: 0.6 };
+
   // ---------- 统计（一次遍历全部国家） ----------
   P.allStats = () => {
-    const S = App.S, ra = P.rowAreas(), m = new Map();
-    S.nations.forEach((n) => m.set(n.id, { n, cells: 0, area: 0, troops: 0, mil: 0, inf: 0, cav: 0, other: 0, armies: [], cities: [], prov: [0, 0, 0, 0] }));
-    for (let c = 0; c < N; c++) { const o = S.owner[c]; if (!o || S.terrain[c] < 2) continue; const st = m.get(o); if (st) { st.cells++; st.area += ra[(c / W) | 0]; } }
+    const S = App.S, ra = P.rowAreas(), m = new Map(), rv = P.riverMask();
+    S.nations.forEach((n) => m.set(n.id, { n, cells: 0, area: 0, good: 0, river: 0, troops: 0, mil: 0, inf: 0, cav: 0, other: 0, armies: [], cities: [], cityPts: 0, prov: [0, 0, 0, 0], terr: {} }));
+    for (let c = 0; c < N; c++) {
+      const o = S.owner[c]; if (!o || S.terrain[c] < 2) continue; const st = m.get(o); if (!st) continue;
+      const a = ra[(c / W) | 0]; st.cells++; st.area += a; st.good += a * P.fertility(c, rv); if (rv[c]) st.river += a;
+      const t = S.terrain[c]; st.terr[t] = (st.terr[t] || 0) + a;
+    }
     S.armies.forEach((a) => {
       const st = m.get(a.nation); if (!st) return;
       const t = P.troops(a.strength), ty = App.ARMY_TYPES.find((k) => k.id === a.type);
       st.troops += t; st.mil += t * (P.WEIGHT[a.type] || 1); st.armies.push(a);
       if (ty && ty.g === '步兵') st.inf += t; else if (ty && ty.g === '骑兵') st.cav += t; else st.other += t;
     });
-    S.cities.forEach((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); const st = c >= 0 && m.get(S.owner[c]); if (st) st.cities.push(ct); });
+    S.cities.forEach((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); const st = c >= 0 && m.get(S.owner[c]); if (st) { st.cities.push(ct); st.cityPts += P.CITY_PTS[ct.type] || 1; } });
     S.provinces.forEach((p) => { const st = m.get(p.nation); if (st) st.prov[p.level || 1]++; });
     return m;
   };
-  // 国力：领土为主（65%），军力为辅（35%）；附庸可按一半计入宗主
+  // 国力 = 有效领土（按地貌、气候、河流折算的可用土地）45% ＋ 城市 20% ＋ 军力 35%；附庸可按一半计入宗主
+  P.WEIGHTS = { good: 0.45, city: 0.2, mil: 0.35 };
   P.ranking = (opt = {}) => {
     const m = P.allStats(), list = [...m.values()].filter((s) => s.cells > 0 || s.troops > 0);
-    list.forEach((s) => { s.eArea = s.area; s.eMil = s.mil; s.eTroops = s.troops; });
-    if (opt.vassals) list.forEach((s) => { const ov = s.n.overlord && m.get(s.n.overlord); if (ov && ov !== s) { ov.eArea += s.area * 0.5; ov.eMil += s.mil * 0.5; ov.eTroops += s.troops * 0.5; } });
-    const mA = Math.max(1, ...list.map((s) => s.eArea)), mM = Math.max(1, ...list.map((s) => s.eMil));
-    list.forEach((s) => { s.aScore = (s.eArea / mA) * 100; s.mScore = (s.eMil / mM) * 100; s.power = s.aScore * 0.65 + s.mScore * 0.35; });
-    const key = opt.sort === 'area' ? 'eArea' : opt.sort === 'mil' ? 'eMil' : 'power';
+    list.forEach((s) => { s.eArea = s.area; s.eGood = s.good; s.eCity = s.cityPts; s.eMil = s.mil; s.eTroops = s.troops; });
+    if (opt.vassals) list.forEach((s) => { const ov = s.n.overlord && m.get(s.n.overlord); if (ov && ov !== s) { ov.eArea += s.area * 0.5; ov.eGood += s.good * 0.5; ov.eCity += s.cityPts * 0.5; ov.eMil += s.mil * 0.5; ov.eTroops += s.troops * 0.5; } });
+    const mx = (k) => Math.max(1e-9, ...list.map((s) => s[k])), mG = mx('eGood'), mC = mx('eCity'), mM = mx('eMil'), w = P.WEIGHTS;
+    list.forEach((s) => { s.gScore = (s.eGood / mG) * 100; s.cScore = (s.eCity / mC) * 100; s.mScore = (s.eMil / mM) * 100; s.power = s.gScore * w.good + s.cScore * w.city + s.mScore * w.mil; });
+    const key = { area: 'eArea', good: 'eGood', city: 'eCity', mil: 'eMil' }[opt.sort] || 'power';
     list.sort((a, b) => b[key] - a[key] || b.power - a.power);
     list.forEach((s, i) => (s.place = i + 1));
     return list;
   };
   P.capital = (n, st) => {
     const cs = st ? st.cities : App.S.cities.filter((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); return c >= 0 && App.S.owner[c] === n.id; });
-    const ORD = ['capital', 'large', 'port', 'medium', 'fortress', 'small', 'pass', 'town'];
+    const ORD = ['capital', 'large', 'port', 'medium', 'fortress', 'small', 'pass', 'village'];
     return cs.slice().sort((a, b) => ORD.indexOf(a.type) - ORD.indexOf(b.type))[0] || null;
+  };
+  // 文明与国体对城市化的影响（游牧、部落城市少；华夏、波斯、罗马城市多）
+  P.URBAN = { huaxia: 1.25, persia: 1.15, latin: 1.2, greek: 1.15, arabic: 1.05, tianzhu: 1.1, wa: 0.95, german: 0.9, english: 0.85, slavic: 0.75, norse: 0.6, celtic: 0.55, nanyang: 0.8, steppe: 0.35 };
+
+  // ---------- 按地理生成城市 ----------
+  // 数量取决于「可用土地总量」而不是面积；大小取决于城址周围的丰饶度、河流与海岸
+  P.genCities = (nid, r = Math.random, opt = {}) => {
+    const S = App.S, n = App.nation(nid); if (!n) return [];
+    const C = App.CELL, FM = opt.fm || P.fertMap(), { f, rv, bl } = FM;
+    if (opt.replace) S.cities = S.cities.filter((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); return !(c >= 0 && S.owner[c] === nid); });
+    const cells = []; let mass = 0, sx = 0, sy = 0;
+    for (let c = 0; c < N; c++) if (S.owner[c] === nid && S.terrain[c] >= 2) { cells.push(c); mass += f[c]; sx += c % W; sy += (c / W) | 0; }
+    if (!cells.length) return [];
+    const cx = sx / cells.length, cy = sy / cells.length, avgF = mass / cells.length;
+    const rk = P.rankOf(n).id, urban = (P.URBAN[n.culture] ?? 1) * (rk === 'tribe' ? 0.45 : rk === 'merchant' ? 1.4 : rk === 'khanate' ? 0.7 : 1) * (opt.density ?? 1);
+    // 目标数量：随良田总量增长（边际递减）；至少 1 座（都城）
+    const target = Math.max(1, Math.round(Math.pow(mass / 120, 0.75) * urban));
+    const have = S.cities.filter((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); return c >= 0 && S.owner[c] === nid; });
+    const placed = have.map((ct) => [ct.x, ct.y]);
+    const minD = 20 + 14 / Math.max(0.4, avgF + 0.3); // 贫瘠地区城市更稀疏
+    const far = (x, y, d) => placed.every((p) => Math.hypot(p[0] - x, p[1] - y) >= d) && S.cities.every((k) => Math.hypot(k.x - x, k.y - y) >= 16);
+    const site = (c) => bl[c] * 0.7 + f[c] * 0.3 + (rv[c] ? 0.18 : 0) + (isCoast(S, c) ? 0.1 : 0);
+    // 候选：按城址分数加权抽样
+    const cand = []; const step = Math.max(1, Math.floor(cells.length / 4000));
+    for (let i = 0; i < cells.length; i += step) { const c = cells[i]; const s = site(c); if (s > 0.04) cand.push([c, s]); }
+    if (!cand.length) cand.push([cells[Math.floor(cells.length / 2)], 0.05]);
+    const out = [];
+    const add = (c, type) => {
+      const x = ((c % W) + 0.5) * C, y = (((c / W) | 0) + 0.5) * C, ct = { id: App.nid(), x, y, type, name: App.Names.city(n.culture, r) };
+      S.cities.push(ct); placed.push([x, y]); out.push(ct); return ct;
+    };
+    // 都城：在丰饶且靠近国土中心的地方
+    if (!have.some((k) => k.type === 'capital')) {
+      let best = cand[0][0], bs = -1;
+      cand.forEach(([c, s]) => { const d = Math.hypot((c % W) - cx, ((c / W) | 0) - cy) / Math.sqrt(cells.length); const v = s * (1.15 - Math.min(0.8, d)); if (v > bs) { bs = v; best = c; } });
+      add(best, 'capital');
+    }
+    // 其余城市：先选城址，再按城址在本国的排名和绝对丰饶度定大小
+    const need = target - have.length - out.length; let tries = 0; const sites = [];
+    const tot = cand.reduce((a, k) => a + k[1] * k[1], 0);
+    while (sites.length < need && tries++ < need * 60 + 200) {
+      let t = r() * tot, c = cand[0][0]; for (const k of cand) { t -= k[1] * k[1]; if (t <= 0) { c = k[0]; break; } }
+      const x = ((c % W) + 0.5) * C, y = (((c / W) | 0) + 0.5) * C; if (!far(x, y, minD)) continue;
+      placed.push([x, y]); sites.push([c, site(c) + (r() - 0.5) * 0.12]);
+    }
+    placed.length -= sites.length;
+    sites.sort((a, b) => b[1] - a[1]);
+    sites.forEach(([c, s], i) => {
+      const p = sites.length > 1 ? i / (sites.length - 1) : 0.5, ter = S.terrain[c], coast = isCoast(S, c);
+      // 大城：本国前 10% 且土地真正富庶；贫瘠国家即使排第一也只是中小城
+      let type = p < 0.1 && s > 0.62 ? 'large' : p < 0.38 && s > 0.38 ? 'medium' : s > 0.16 && p < 0.8 ? 'small' : 'village';
+      if (coast && type !== 'village' && r() < 0.5) type = type === 'large' && r() < 0.6 ? 'large' : 'port';
+      else if ((ter === 5 || ter === 4) && type !== 'large' && r() < 0.35) type = r() < 0.5 ? 'fortress' : 'pass';
+      add(c, type);
+    });
+    return out;
+  };
+
+  // ---------- 按国力生成军队 ----------
+  const MIX = {
+    huaxia: [['infantry', 3], ['crossbow', 2], ['spear', 2], ['cavalry', 2], ['heavyCav', 1], ['shield', 1]],
+    steppe: [['horseArcher', 5], ['cavalry', 3], ['heavyCav', 1.5], ['infantry', 0.5]],
+    wa: [['spear', 3], ['archer', 2], ['infantry', 2], ['cavalry', 1]],
+    tianzhu: [['infantry', 3], ['archer', 2], ['elephant', 1.5], ['cavalry', 1], ['chariot', 0.5]],
+    persia: [['heavyCav', 2.5], ['archer', 2], ['infantry', 2], ['horseArcher', 1], ['elephant', 0.6]],
+    nanyang: [['infantry', 3], ['elephant', 1.2], ['archer', 1.5], ['spear', 1]],
+    latin: [['heavyInf', 4], ['archer', 1], ['cavalry', 1], ['siege', 0.5]],
+    greek: [['heavyInf', 2.5], ['spear', 2], ['heavyCav', 1.5], ['archer', 1]],
+    german: [['heavyCav', 2], ['spear', 2.5], ['infantry', 2], ['crossbow', 1]],
+    english: [['archer', 2.5], ['heavyInf', 2], ['spear', 1.5], ['heavyCav', 1]],
+    slavic: [['infantry', 2.5], ['cavalry', 2], ['spear', 1.5], ['archer', 1]],
+    norse: [['infantry', 3], ['shield', 2], ['archer', 1]],
+    celtic: [['infantry', 3], ['spear', 1.5], ['chariot', 1], ['militia', 1]],
+    arabic: [['cavalry', 2.5], ['camel', 2], ['infantry', 2], ['archer', 1]],
+  };
+  const MARTIAL = { steppe: 1.7, norse: 1.3, german: 1.1, latin: 1.1, persia: 1.05, celtic: 1.1, nanyang: 0.85, tianzhu: 0.9 };
+  const fmtTroops = (t) => (t >= 1e4 ? (Math.round(t / 5e3) / 2) + '万' : String(Math.max(500, Math.round(t / 100) * 100)));
+  const nationCities = (n) => App.S.cities.filter((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); return c >= 0 && App.S.owner[c] === n.id; });
+  const ORD2 = ['capital', 'large', 'port', 'fortress', 'medium', 'pass', 'small', 'village'];
+  P.armySpot = (n, i) => {
+    const cs = nationCities(n).sort((a, b) => ORD2.indexOf(a.type) - ORD2.indexOf(b.type));
+    const ang = i * 2.4;
+    if (cs.length) { const c = cs[i % cs.length]; return [c.x + Math.cos(ang) * 22, c.y + 18 + Math.sin(ang) * 10]; }
+    const L = App.Geo.labels && App.Geo.labels.get(n.id); return L ? [L.x + Math.cos(ang) * 30, L.y + 30 + Math.sin(ang) * 20] : [App.WW / 2, App.HH / 2];
+  };
+  P.genArmies = (n, opt = {}, r = Math.random) => {
+    const S = App.S, st = P.allStats().get(n.id); if (!st || !st.cells) return [];
+    if (opt.replace) S.armies = S.armies.filter((a) => a.nation !== n.id);
+    const rk = P.rankOf(n).id;
+    let total = (st.good * 0.05 + st.cityPts * 1500) * (MARTIAL[n.culture] || 1) * (rk === 'tribe' ? 0.6 : 1);
+    total = Math.max(1500, total);
+    if (!opt.replace) total -= st.troops;
+    if (total < 800) return [];
+    const k = U.clamp(Math.round(Math.sqrt(total / 9000)), 1, 7);
+    const mix = MIX[n.culture] || MIX.huaxia, wsum = mix.reduce((a, x) => a + x[1], 0);
+    const pickT = () => { let t = r() * wsum; for (const [id, w] of mix) { t -= w; if (t <= 0) return id; } return mix[0][0]; };
+    const cs = nationCities(n).sort((a, b) => ORD2.indexOf(a.type) - ORD2.indexOf(b.type));
+    const hasPort = cs.find((c) => c.type === 'port');
+    const shares = Array.from({ length: k }, () => 0.6 + r()), ss = shares.reduce((a, b) => a + b, 0);
+    const zh = !App.Names.groups.latin.includes(n.culture), out = [];
+    const base0 = st.armies.length;
+    for (let i = 0; i < k; i++) {
+      let type = pickT(), near = cs[i % Math.max(1, cs.length)];
+      if (i === 0 && k >= 3 && rk !== 'tribe') type = 'guard';
+      if (i === k - 1 && hasPort && k >= 2 && r() < 0.8) { type = 'navy'; near = hasPort; }
+      const cname = near ? near.name.replace(/(城|港|京|堡)$/, '') : P.baseName(n);
+      const name = type === 'guard' ? (n.culture === 'steppe' ? '牙帐亲军' : n.culture === 'wa' ? '旗本' : zh ? '禁军' : '近卫军') : type === 'navy' ? cname + (zh ? '水师' : '舰队') : n.culture === 'steppe' ? ['左翼', '右翼', '中军', '前锋', '后军'][i % 5] : n.culture === 'latin' ? cname + '军团' : cname + '军';
+      const [x, y] = near ? [near.x + Math.cos((base0 + i) * 2.4) * 22, near.y + 18 + Math.sin((base0 + i) * 2.4) * 10] : P.armySpot(n, base0 + i);
+      const a = { id: App.nid(), x, y, nation: n.id, type, strength: fmtTroops((total * shares[i]) / ss), name };
+      S.armies.push(a); out.push(a);
+    }
+    return out;
   };
 
   // ---------- 统治家族 ----------
