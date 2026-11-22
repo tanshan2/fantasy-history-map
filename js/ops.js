@@ -125,31 +125,8 @@
     if (!k1) k1 = U.clamp(Math.round(cells.length / sys.per), 1, 15);
     sub(cells, 1, null, Math.min(k1, Math.max(1, Math.floor(cells.length / MINC[1]))));
   };
-
-  // 自动生成城市
-  O.autoCities = (nid, r = Math.random, density = 1) => {
-    const S = App.S, n = App.nation(nid); if (!n) return;
-    App.Geo.dirtyPol = true; App.Geo.update();
-    const near = (x, y, d) => S.cities.some((c) => U.dist(c.x, c.y, x, y) < d);
-    const add = (x, y, type) => { if (near(x, y, 22)) return; S.cities.push({ id: App.nid(), x, y, type, name: App.Names.city(n.culture, r) }); };
-    if (!S.cities.some((c) => c.type === 'capital' && S.owner[O.cellAt(c.x, c.y)] === nid)) {
-      const info = App.Geo.labels.get(nid); if (info) add(info.x + C * 3, info.y + C * 3, 'capital');
-    }
-    const lvUse = S.provinces.some((p) => p.nation === nid && p.level === 2) ? 2 : 1;
-    S.provinces.filter((p) => p.nation === nid && (p.level || 1) === lvUse).forEach((p) => {
-      const info = App.Geo.provLabels.get(p.id); if (!info) return;
-      add(info.x + (r() - 0.5) * 30, info.y + (r() - 0.5) * 30 + 14, info.n > 900 ? 'large' : 'medium');
-    });
-    const cells = []; for (let c = 0; c < N; c++) if (S.owner[c] === nid) cells.push(c);
-    const extra = Math.round((cells.length / 700) * density);
-    for (let i = 0; i < extra * 2 && extra > 0; i++) {
-      const c = cells[Math.floor(r() * cells.length)], x = c % W, y = (c / W) | 0;
-      const coast = [c - 1, c + 1, c - W, c + W].some((m) => m >= 0 && m < N && S.terrain[m] < 2);
-      const t = S.terrain[c];
-      if (t === 6 || (t === 7 && r() < 0.7)) continue;
-      add((x + 0.5) * C, (y + 0.5) * C, coast && r() < 0.6 ? 'port' : t === 5 && r() < 0.4 ? 'fortress' : r() < 0.6 ? 'small' : 'village');
-    }
-  };
+  // 按地理生成城市（数量看可用土地，大小看城址的地貌、气候、河流、海岸）
+  O.autoCities = (nid, r = Math.random, density = 1, opt = {}) => App.Polity.genCities(nid, r, { density, ...opt });
 
   // 区域内随机重命名
   O.renameAll = (nid, r = Math.random) => {
