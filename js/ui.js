@@ -15,6 +15,7 @@
     nation: '<path d="M5 21V3M5 4h12l-3 4 3 4H5" />',
     prov: '<rect x="3" y="3" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 11h8V3M11 11l5 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2"/>',
     line: '<path d="M3 18L9 8l5 7 7-11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-dasharray="4 2"/>',
+    war: '<path d="M4 20l5-5M3 21l2-2M14.5 3.5L20 3l-.5 5.5L9 19l-4-4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M6 12l6 6" stroke="currentColor" stroke-width="1.8"/>',
     wall: '<path d="M2 17h20v4H2zM3 13h3v4H3zM8 13h3v4H8zM13 13h3v4h-3zM18 13h3v4h-3zM9 6h6v11H9z"/><path d="M9 4h1.5v2H9zM11.25 4h1.5v2h-1.5zM13.5 4H15v2h-1.5z"/>',
     city: '<path d="M3 21V10l4-3 4 3v11zM13 21V5l4-2 4 2v16z"/>',
     army: '<rect x="3" y="6" width="18" height="12" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 6l18 12M21 6L3 18" stroke="currentColor" stroke-width="1.6"/>',
@@ -23,7 +24,7 @@
     text: '<path d="M4 5h16v3h-6v12h-4V8H4z"/>',
   };
   const TOOLS = [['color', '彩笔', '1 / B'], ['select', '选择', '2 / V'], ['pan', '平移', 'H'], ['land', '陆海', '3 / L'], ['terrain', '地貌', '4 / T'], ['forest', '森林', '5 / F'], ['river', '河流', '6 / R'],
-    ['nation', '国家', '7 / N'], ['prov', '行政区', '8 / P'], ['line', '线条', 'K'], ['wall', '长城', 'Y'], ['city', '城市', '9 / C'], ['army', '军队', '0 / J'], ['arrow', '进军', 'U'], ['marker', '标记', 'M'], ['text', '文字', 'X']];
+    ['nation', '国家', '7 / N'], ['prov', '行政区', '8 / P'], ['war', '征服', 'G'], ['line', '线条', 'K'], ['wall', '长城', 'Y'], ['city', '城市', '9 / C'], ['army', '军队', '0 / J'], ['arrow', '进军', 'U'], ['marker', '标记', 'M'], ['text', '文字', 'X']];
 
   UI.init = () => {
     $('#tools').innerHTML = TOOLS.map(([id, n, k]) => `<button class="tool" data-tool="${id}" title="${n}（${k}）"><svg viewBox="0 0 24 24" fill="currentColor">${ICON[id]}</svg><span>${n}</span></button>`).join('');
@@ -92,6 +93,14 @@
       case 'terrain': h = chips('tmode', [{ id: 'terrain', name: '画地貌' }, { id: 'climate', name: '画气候' }]) + (o.tmode === 'climate' ? chips('climate', App.Climate.LIST.filter(Boolean)) + '<button class="btn small" data-rebiome="1" title="按气候重新铺设整张地图的地貌和森林（山地丘陵保留）">按气候重铺地貌</button>' : chips('terrain', App.TERRAINS)) + brush(); break;
       case 'forest': h = chips('forest', App.FORESTS) + brush(); break;
       case 'river': h = `<label class="rng">河宽 <input type="range" min="0.6" max="6" step="0.2" value="${o.riverWidth}" data-num="riverWidth"><b>${o.riverWidth}</b></label><span class="hint">从源头画向入海口（越画越宽）</span>`; break;
+      case 'war': {
+        const nopt = (cur) => App.S.nations.map((n) => `<option value="${n.id}" ${n.id === cur ? 'selected' : ''}>${U.esc(n.name) || '（未命名）'}</option>`).join('');
+        h = `<label>进攻方 <select data-act="activeNation"><option value="0">— 选择国家 —</option>${nopt(T().activeNation)}</select></label>` + chips('warMode', App.War.MODES)
+          + `<label>只打 <select data-act="warTarget"><option value="0">任意敌国</option>${nopt(o.warTarget)}</select></label>`;
+        if (o.warMode === 'brush') h += brush() + `<button class="chip lock ${o.lockRiver ? 'on' : ''}" data-lock="lockRiver" title="笔刷碰到河流就停">以河为界</button><button class="chip lock ${o.lockMtn ? 'on' : ''}" data-lock="lockMtn" title="不越过山地">以山为界</button><button class="chip lock ${o.warWild ? 'on' : ''}" data-lock="warWild" title="连无主之地一起占">也占无主地</button><span class="hint">涂过的敌国领土归进攻方，变成无名空白区；没被吃干净的行政区保留剩下部分</span>`;
+        else h += `<span class="hint">把鼠标移到敌国领土上会高亮整块${['', '一级', '二级', '三级'][+o.warMode.slice(1)]}行政区，点一下就整块吞并（名称和下级都保留）</span>`;
+        break;
+      }
       case 'nation': h = nationPick() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
       case "prov": h = nationPick() + `<label>行政区 <select data-act="activeProv"><option value="0">— 选择 —</option>${UI.provOptions()}</select></label>` + (o.erase ? chips("provLevel", [{ id: 1, name: "擦省" }, { id: 2, name: "擦道" }, { id: 3, name: "擦府" }]) : "") + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
       case 'line': h = chips('lineStyle', App.LINE_STYLES) + '<span class="hint">按住拖动绘制</span>'; break;
@@ -119,6 +128,7 @@
     bar.querySelectorAll('[data-str]').forEach((i) => (i.oninput = () => (o[i.dataset.str] = i.value)));
     bar.querySelectorAll('[data-act=activeNation]').forEach((s) => (s.onchange = () => { T().activeNation = +s.value; T().activeProv = 0; UI.refresh(); UI.refreshTool(); }));
     bar.querySelectorAll('[data-act=activeProv]').forEach((s) => (s.onchange = () => { T().activeProv = +s.value; UI.refresh(); }));
+    bar.querySelectorAll('[data-act=warTarget]').forEach((s) => (s.onchange = () => { o.warTarget = +s.value; App.R.request(); }));
     $('#stage').dataset.tool = T().cur;
   };
 
@@ -182,7 +192,8 @@
     };
     let h = `<div class="row"><b style="color:${an.color}">■</b>&nbsp;${U.esc(an.name)} 的行政区</div>
       <div class="row wrap"><button class="btn pri" data-act="addProv">＋ 新建${App.levelName(an, 1)}</button></div><p class="muted">制度：${App.sysOf(an).name}（在「国家」页修改）</p><div></div>`;
-    h += '<ul class="list ptree">' + kids(0, 1).map(row).join('') + '</ul>';
+    const orphans = ps.filter((p) => (p.level || 1) > 1 && !ps.some((q) => q.id === p.parent));
+    h += '<ul class="list ptree">' + kids(0, 1).map(row).join('') + (orphans.length ? '<li class="muted" style="cursor:default">— 新占领 / 未编入上级 —</li>' + orphans.map(row).join('') : '') + '</ul>';
     if (!ps.length) h += '<p class="muted">新建省后，可在省下面建道、在道下面建府；选中后用左侧「行政区」工具在本国领土内涂抹。也可以回到「国家」页一键自动划分。</p>';
     const ap = App.province(T().activeProv);
     if (ap && ap.nation === an.id) {
@@ -405,7 +416,7 @@
       ${row(K('5') + ' / ' + K('F'), '森林')}${row(K('6') + ' / ' + K('R'), '河流')}
       ${row(K('7') + ' / ' + K('N'), '国家')}${row(K('8') + ' / ' + K('P'), '行政区')}
       ${row(K('9') + ' / ' + K('C'), '城市')}${row(K('0') + ' / ' + K('J'), '军队')}
-      ${row(K('H'), '平移')}${row(K('K'), '线条')}${row(K('Y'), '长城')}${row(K('U'), '进军箭头')}${row(K('M'), '标记')}${row(K('X'), '文字')}
+      ${row(K('H'), '平移')}${row(K('K'), '线条')}${row(K('G'), '征服（吞并行政区 / 画笔占领）')}${row(K('Y'), '长城')}${row(K('U'), '进军箭头')}${row(K('M'), '标记')}${row(K('X'), '文字')}
       <h4>国家</h4>
       ${row(K('I'), '国家档案（当前高亮或选中的国家）')}${row(K('O'), '国力排名')}${row(K('Shift') + ' / ' + K('Ctrl') + ' + 点击', '多选国家（地图或列表），批量设附庸、改国体等')}${row(K('Esc'), '清空多选')}
       <h4>画笔</h4>
