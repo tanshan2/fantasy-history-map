@@ -272,7 +272,7 @@
     const c = App.Ops.cellAt(wx, wy), owner = c >= 0 ? S.owner[c] : 0, on = App.nation(owner), cul = on ? on.culture : App.nation(T.activeNation)?.culture || 'huaxia';
     App.pushUndo();
     let obj, kind;
-    if (T.cur === 'city') { kind = 'cities'; obj = { id: App.nid(), x: wx, y: wy, type: o.cityType, name: App.Names.city(cul) }; }
+    if (T.cur === 'city') { kind = 'cities'; obj = { id: App.nid(), x: wx, y: wy, type: o.cityType, name: App.Names.city(cul, undefined, wx, wy) }; }
     else if (T.cur === 'army') {
       const nid = T.activeNation || owner; if (!nid) { App.undoStack.pop(); App.UI.toast('请先在右侧选择一个国家'); return; }
       kind = 'armies'; obj = { id: App.nid(), x: wx, y: wy, nation: nid, type: o.armyType, strength: o.strength, name: '' };
