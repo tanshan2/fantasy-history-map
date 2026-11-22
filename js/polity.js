@@ -93,7 +93,7 @@
   };
   P.renameByRank = (n) => {
     const b = P.baseName(n), t = P.title(n), r = t.rank;
-    if (r.id === 'empire' && n.culture === 'huaxia') n.name = (Array.from(b).length <= 2 ? '大' : '') + b;
+    if (r.id === 'empire' && n.culture === 'huaxia') n.name = (Array.from(b).length <= 1 ? '大' : '') + b;
     else n.name = b + t.suf;
   };
 
@@ -249,7 +249,8 @@
     const placed = []; const out = [];
     const xy = (c) => [((c % W) + 0.5) * C, (((c / W) | 0) + 0.5) * C];
     const free = (c, d) => { const [x, y] = xy(c); return placed.every((p) => Math.hypot(p[0] - x, p[1] - y) >= d) && S.cities.every((k) => Math.hypot(k.x - x, k.y - y) >= Math.min(d, 16)); };
-    const add = (c, type) => { const [x, y] = xy(c), ct = { id: App.nid(), x, y, type, name: App.Names.city(n.culture, r) }; S.cities.push(ct); placed.push([x, y]); out.push(ct); return ct; };
+    const usedC = App.PlaceNames ? App.PlaceNames.used('city') : null;
+    const add = (c, type) => { const [x, y] = xy(c), ct = { id: App.nid(), x, y, type, name: App.Names.city(n.culture, r, x, y, usedC) }; if (usedC) usedC.add(ct.name); S.cities.push(ct); placed.push([x, y]); out.push(ct); return ct; };
     const pickW = (arr, w) => { const tot = arr.reduce((a, k) => a + w(k), 0); let t = r() * tot; for (const k of arr) { t -= w(k); if (t <= 0) return k; } return arr[arr.length - 1]; };
     // 城址分数：沿河最优先，其次平原，再看周围丰饶度
     const T = (c) => S.terrain[c];
