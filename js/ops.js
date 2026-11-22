@@ -44,8 +44,11 @@
     S.arrows = S.arrows.filter((a) => a.nation !== id);
   };
   // 删除行政区（连同其下级）
-  O.deleteProvince = (id) => {
-    const S = App.S, kill = new Set([id]);
+  O.deleteProvince = (id) => O.deleteProvinces([id]);
+  // 批量删除（连同下级），整张图只扫一遍
+  O.deleteProvinces = (ids) => {
+    if (!ids.length) return;
+    const S = App.S, kill = new Set(ids);
     let grew = true; while (grew) { grew = false; S.provinces.forEach((p) => { if (p.parent && kill.has(p.parent) && !kill.has(p.id)) { kill.add(p.id); grew = true; } }); }
     for (let c = 0; c < N; c++) { if (kill.has(S.prov[c])) S.prov[c] = 0; if (kill.has(S.prov2[c])) S.prov2[c] = 0; if (kill.has(S.prov3[c])) S.prov3[c] = 0; }
     S.provinces = S.provinces.filter((p) => !kill.has(p.id));
@@ -63,28 +66,77 @@
   };
 
   // 把一组格子切成 k 块，返回每格所属块下标
+  // 1) 种子优先放在城市上（州府、郡治多是大城），其余用远点采样；
+  // 2) 扩张代价：过河、翻山很贵（边界自然落在河道、山脊上），再加分形噪声让边界自然弯曲；
+  // 3) 迭代调整各块的扩张速度，让大小大致均匀；4) 清除飞块碎片，并入相邻的区。
+  // 只在这组格子内部做局部计算（不分配整张地图大小的数组），一次划分全国也很快。
+  let LOC = null, RVK = '', RVC = null;
+  const riverCached = () => {
+    const S = App.S, k = S.rivers.length + ':' + S.rivers.reduce((a, r) => a + (r.pts ? r.pts.length : 0), 0);
+    if (k !== RVK || !RVC) { RVC = App.Polity ? App.Polity.riverMask() : new Uint8Array(N); RVK = k; }
+    return RVC;
+  };
   O.splitCells = (cells, k, r, salt = 0) => {
-    const S = App.S;
-    k = Math.max(1, Math.min(k, Math.floor(cells.length / 12) || 1));
-    if (k === 1) return { k, idx: new Int32Array(cells.length) };
-    const inSet = new Uint8Array(N); cells.forEach((c) => (inSet[c] = 1));
-    const sample = []; const step = Math.max(1, Math.floor(cells.length / 2500));
-    for (let i = 0; i < cells.length; i += step) sample.push(cells[i]);
-    const seeds = [sample[Math.floor(r() * sample.length)]];
+    const S = App.S, L = cells.length;
+    k = Math.max(1, Math.min(k, Math.floor(L / 12) || 1));
+    if (k === 1) return { k, idx: new Int32Array(L) };
+    if (!LOC) LOC = new Int32Array(N).fill(-1);
+    cells.forEach((c, j) => (LOC[c] = j));
+    const rv = riverCached(), sd = salt * 13.7 + 5;
+    const cost = new Float32Array(L);
+    cells.forEach((c, j) => { const t = S.terrain[c], x = c % W, y = (c / W) | 0; cost[j] = 1 + U.fbm(x / 9 + sd, y / 9, 3, 3) * 2.2 + (rv[c] ? 7 : 0) + (t === 5 ? 3.5 : t === 6 ? 5 : t === 4 ? 0.8 : 0) + (t === 8 ? 1 : 0); });
+    const nbs = (j, f) => { const c = cells[j], x = c % W; if (x > 0 && LOC[c - 1] >= 0) f(LOC[c - 1]); if (x < W - 1 && LOC[c + 1] >= 0) f(LOC[c + 1]); if (c >= W && LOC[c - W] >= 0) f(LOC[c - W]); if (c < N - W && LOC[c + W] >= 0) f(LOC[c + W]); };
+    const xy = (j) => [cells[j] % W, (cells[j] / W) | 0];
+    // 种子（局部下标）
+    const ORD = { capital: 0, large: 1, port: 2, medium: 3, small: 4, fortress: 5, pass: 6, village: 7 };
+    const cityJ = S.cities.map((ct) => { const c = O.cellAt(ct.x, ct.y); return [c >= 0 ? LOC[c] : -1, ORD[ct.type] ?? 5, c]; }).filter(([j, o, c]) => j >= 0 && o <= 4 && !rv[c]).sort((a, b) => a[1] - b[1]);
+    const minSep = Math.sqrt(L / k) * 0.75, seeds = [];
+    const far = (j, d) => { const [x, y] = xy(j); return seeds.every((s) => { const [sx, sy] = xy(s); return Math.hypot(sx - x, sy - y) >= d; }); };
+    cityJ.forEach(([j]) => { if (seeds.length < k && far(j, minSep)) seeds.push(j); });
+    const step = Math.max(1, Math.floor(L / 2500)), sample = []; for (let j = 0; j < L; j += step) sample.push(j);
+    if (!seeds.length) seeds.push(sample[Math.floor(r() * sample.length)]);
     const md = new Float32Array(sample.length).fill(Infinity);
-    while (seeds.length < k) {
-      const s = seeds[seeds.length - 1], sx = s % W, sy = (s / W) | 0; let bi = 0, bd = -1;
-      sample.forEach((c, i) => { const d = (c % W - sx) ** 2 + (((c / W) | 0) - sy) ** 2; if (d < md[i]) md[i] = d; const v = md[i] * (0.7 + r() * 0.6); if (v > bd) { bd = v; bi = i; } });
-      seeds.push(sample[bi]);
+    const upd = (s) => { const [sx, sy] = xy(s); sample.forEach((j, i) => { const [x, y] = xy(j), d = (x - sx) ** 2 + (y - sy) ** 2; if (d < md[i]) md[i] = d; }); };
+    seeds.forEach(upd);
+    while (seeds.length < k) { let bi = 0, bd = -1; sample.forEach((j, i) => { const v = md[i] * (0.75 + r() * 0.5); if (v > bd) { bd = v; bi = i; } }); seeds.push(sample[bi]); upd(sample[bi]); }
+    // 局部多源最短路
+    const grow = (mult) => {
+      const best = new Float64Array(L).fill(Infinity), who = new Int32Array(L).fill(-1), h = new U.Heap();
+      seeds.forEach((s, i) => { best[s] = 0; who[s] = i; h.push(0, s); });
+      while (h.size) { const j = h.pop(), d = h.topK; if (d > best[j]) continue; const m = mult[who[j]], si = who[j];
+        nbs(j, (q) => { const nd = d + cost[q] * m; if (nd < best[q]) { best[q] = nd; who[q] = si; h.push(nd, q); } }); }
+      return who;
+    };
+    const target = L / k, mult = seeds.map(() => 0.85 + r() * 0.3); let who;
+    for (let it = 0; it < 5; it++) {
+      who = grow(mult);
+      const size = new Float64Array(k); for (let j = 0; j < L; j++) if (who[j] >= 0) size[who[j]]++;
+      let worst = 0; for (let i = 0; i < k; i++) { const q = size[i] / target; worst = Math.max(worst, q, 1 / Math.max(q, 0.05)); mult[i] *= U.clamp(Math.pow(Math.max(q, 0.05), 0.55), 0.6, 1.7); }
+      if (worst < 1.6) break;
     }
-    const sd = salt * 13.7 + 5;
-    const who = U.grow(seeds.map((c) => ({ cell: c })), (c) => (inSet[c] ? 1 + U.noise((c % W) / 7 + sd, ((c / W) | 0) / 7, 3) * 1.6 + (S.terrain[c] === 5 || S.terrain[c] === 6 ? 2 : 0) : Infinity));
-    const idx = new Int32Array(cells.length);
-    cells.forEach((c, j) => {
-      let i = who[c];
-      if (i < 0) { const x = c % W, y = (c / W) | 0; let bd = Infinity; seeds.forEach((s, t) => { const d = (s % W - x) ** 2 + (((s / W) | 0) - y) ** 2; if (d < bd) { bd = d; i = t; } }); }
+    // 没扩张到的（隔海的岛）：归最近的种子
+    const idx = new Int32Array(L);
+    for (let j = 0; j < L; j++) {
+      let i = who[j];
+      if (i < 0) { const [x, y] = xy(j); let bd = Infinity; seeds.forEach((s, t) => { const [sx, sy] = xy(s), d = (sx - x) ** 2 + (sy - y) ** 2; if (d < bd) { bd = d; i = t; } }); }
       idx[j] = i;
+    }
+    // 清碎片：每块只保留最大连通部分（够大的海岛除外），其余并入接壤最多的相邻块
+    const seen = new Uint8Array(L), pieces = [];
+    for (let s = 0; s < L; s++) {
+      if (seen[s]) continue; const id = idx[s], comp = [s]; seen[s] = 1;
+      for (let h = 0; h < comp.length; h++) nbs(comp[h], (q) => { if (!seen[q] && idx[q] === id) { seen[q] = 1; comp.push(q); } });
+      pieces.push({ id, comp });
+    }
+    const biggest = new Map(); pieces.forEach((p) => { if (!biggest.has(p.id) || biggest.get(p.id).comp.length < p.comp.length) biggest.set(p.id, p); });
+    pieces.sort((a, b) => a.comp.length - b.comp.length).forEach((p) => {
+      if (biggest.get(p.id) === p) return;
+      const touch = new Map(); p.comp.forEach((j) => nbs(j, (q) => { if (idx[q] !== p.id) touch.set(idx[q], (touch.get(idx[q]) || 0) + 1); }));
+      let to = -1, bt = 0; touch.forEach((v, key) => { if (v > bt) { bt = v; to = key; } });
+      if (to < 0) { if (p.comp.length >= target * 0.15) return; const [x, y] = xy(p.comp[0]); let bd = Infinity; seeds.forEach((s, t) => { const [sx, sy] = xy(s), d = (sx - x) ** 2 + (sy - y) ** 2; if (d < bd && t !== p.id) { bd = d; to = t; } }); }
+      if (to >= 0) p.comp.forEach((j) => (idx[j] = to));
     });
+    cells.forEach((c) => (LOC[c] = -1));
     return { k, idx };
   };
 
@@ -100,8 +152,8 @@
     const S = App.S, n = App.nation(nid); if (!n) return;
     const sys = App.sysOf(n), maxLv = sys.levels;
     const cells = []; for (let c = 0; c < N; c++) if (S.owner[c] === nid) cells.push(c);
-    if (!opts.keepL1) S.provinces.filter((p) => p.nation === nid).forEach((p) => O.deleteProvince(p.id));
-    else S.provinces.filter((p) => p.nation === nid && (p.level || 1) > 1).forEach((p) => O.deleteProvince(p.id));
+    if (!opts.keepL1) O.deleteProvinces(S.provinces.filter((p) => p.nation === nid).map((p) => p.id));
+    else O.deleteProvinces(S.provinces.filter((p) => p.nation === nid && (p.level || 1) > 1).map((p) => p.id));
     if (!cells.length) return;
     const sub = (parentCells, level, parent, kk) => {
       const { k, idx } = O.splitCells(parentCells, kk, r, (parent ? parent.id : nid) * 7 + level);
