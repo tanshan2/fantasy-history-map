@@ -4,9 +4,9 @@
   const T = (App.Tools = {
     cur: 'select', activeNation: 0, activeProv: 0, sel: null, mouse: null, hl: 0,
     opt: { brush: 5, land: 'land', terrain: 5, forest: 1, fill: false, erase: false, cityType: 'medium', armyType: 'infantry', strength: '1万',
-      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, lockOther: false, lockRiver: false, lockMtn: false, lockSea: false, askRefine: true, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28, wallType: 'ming', wallTowers: true, wallRidge: true, wallPass: true },
+      lineStyle: 'border', provLevel: 1, color: '#c8584a', makeLand: true, lockOther: false, lockRiver: false, lockMtn: false, lockSea: false, askRefine: true, tmode: 'terrain', climate: 7, markerType: 'battle', riverWidth: 2.2, arrowWidth: 14, textSize: 28, warMode: 'l1', warTarget: 0, warWild: false, wallType: 'ming', wallTowers: true, wallRidge: true, wallPass: true },
   });
-  const BRUSH = ['color', 'land', 'terrain', 'forest', 'nation', 'prov'];
+  const BRUSH = ['color', 'land', 'terrain', 'forest', 'nation', 'prov', 'war'];
   // 彩色画笔：同一种颜色 = 同一块势力（没有就自动建一个未命名的）
   T.colorNation = () => {
     const col = (T.opt.color || '#c8584a').toLowerCase();
@@ -88,7 +88,7 @@
   };
 
   // ---------- 智能笔刷：锁定他国 / 以河为界 / 以山为界 / 以海为界 ----------
-  const POL = ['color', 'nation', 'prov'];
+  const POL = ['color', 'nation', 'prov', 'war'];
   T.altDown = false;
   // 湿颜料层 & 节流重算：涂色过程中只即时显示，重计算延后
   T.wet = document.createElement('canvas'); T.wet.width = W; T.wet.height = H; T.wetCtx = T.wet.getContext('2d'); T.wetImg = T.wetCtx.createImageData(W, H); T.wetOn = false;
@@ -106,8 +106,9 @@
     clearTimeout(flushT); flushT = 0;
     if ((T.cur === 'color' || T.cur === 'nation') && !T.opt.erase && T.pending.pol) App.Ops.fillUnassigned();
     const hadPol = !!T.pending.pol;
+    if (T.cur === 'war' && App.War) App.War.afterBrush();
     flushNow(true); T.wetOn = false; T.wetCtx.clearRect(0, 0, W, H);
-    if (hadPol && POL.includes(T.cur) && !T.opt.erase && T.opt.askRefine !== false && App.Refine && T.strokeSnap) {
+    if (hadPol && POL.includes(T.cur) && T.cur !== 'war' && !T.opt.erase && T.opt.askRefine !== false && App.Refine && T.strokeSnap) {
       const S = App.S, prov = App.province(T.activeProv), lv = prov ? prov.level || 1 : 1;
       const before = T.cur === 'prov' ? T.strokeSnap.arrs[App.provKey(lv)] : T.strokeSnap.arrs.owner, now = T.cur === 'prov' ? App.provArr(lv) : S.owner;
       let k = 0; if (before) for (let c = 0; c < App.N && k < 15; c++) if (before[c] !== now[c]) k++;
@@ -144,7 +145,7 @@
     if (t < 2) return T.cur === 'color' && o.makeLand && !App.S.meta.vec && !o.erase && !(locks && o.lockSea);
     if (!locks) return true;
     if (o.lockMtn && (t === 5 || t === 6)) return false;
-    if (o.lockOther && !o.erase) {
+    if (o.lockOther && !o.erase && T.cur !== 'war') {
       if (T.cur === 'prov') { const A = App.provArr(ctx.lv); if (A[c] && A[c] !== ctx.target) return false; }
       else if (S.owner[c] && S.owner[c] !== ctx.target) return false;
     }
@@ -198,6 +199,10 @@
       else if (tool === 'nation') {
         if (o.erase) { if (S.owner[c]) { S.owner[c] = 0; App.Ops.clearAllProv(c); ch = true; } }
         else if (nid && S.owner[c] !== nid) { S.owner[c] = nid; App.Ops.clearAllProv(c); ch = true; }
+      } else if (tool === 'war') {
+        // 自由画笔占领：只占别国（或勾选后的无主地），占到的地变成无名空白区
+        const own = S.owner[c];
+        if (nid && own !== nid && (o.warTarget ? own === o.warTarget : own || o.warWild)) { S.owner[c] = nid; App.Ops.clearAllProv(c); ch = true; }
       } else if (tool === 'prov') {
         const lv = T.opt.provLevel || 1, A = App.provArr(prov ? prov.level || 1 : lv);
         if (o.erase) { if (App.provArr(lv)[c] && S.owner[c] === nid) { App.Ops.clearProvCell(c, lv); ch = true; } }
@@ -211,10 +216,10 @@
     if (POL.includes(tool)) {
       P.pol = true;
       // 即时显示：先把涂到的格子画到“湿颜料”层，松开鼠标再重算边界
-      const col = U.hexToRgb(tool === 'color' ? (o.erase ? '#e6d6b0' : o.color) : tool === 'nation' ? (o.erase ? '#e6d6b0' : App.nation(nid)?.color || '#888888') : U.shade(App.nation(prov ? prov.nation : nid)?.color || '#888888', 0.45));
+      const col = U.hexToRgb(tool === 'color' ? (o.erase ? '#e6d6b0' : o.color) : tool === 'nation' || tool === 'war' ? (o.erase && tool === 'nation' ? '#e6d6b0' : App.nation(nid)?.color || '#888888') : U.shade(App.nation(prov ? prov.nation : nid)?.color || '#888888', 0.45));
       const wc = T.wetCtx; wc.fillStyle = U.rgbToHex(col[0], col[1], col[2]);
       for (const c of cells) {
-        const ok = tool === 'prov' ? (o.erase ? !App.provArr(o.provLevel || 1)[c] : prov && App.provArr(prov.level || 1)[c] === prov.id) : o.erase ? !S.owner[c] : S.owner[c] === (tool === 'color' ? cnid : nid);
+        const ok = tool === 'prov' ? (o.erase ? !App.provArr(o.provLevel || 1)[c] : prov && App.provArr(prov.level || 1)[c] === prov.id) : o.erase && tool !== 'war' ? !S.owner[c] : S.owner[c] === (tool === 'color' ? cnid : nid);
         if (ok) wc.fillRect(c % W, (c / W) | 0, 1, 1);
       }
       T.wetOn = true;
@@ -256,6 +261,7 @@
   };
   // 预览：开着锁定时，显示这一笔实际会涂到的格子
   T.drawBrushPreview = (c, s) => {
+    if (T.cur === 'war' && App.War) App.War.drawPreview(c, s);
     const m = T.mouse; if (!m || !T.locksOn() || T.opt.fill) return;
     const ctx = brushCtx(false), cells = T.brushCells(m[0], m[1], ctx);
     let col = '#ffffff';
@@ -305,6 +311,7 @@
     }
     if (BRUSH.includes(T.cur)) {
       if ((T.cur === 'nation' || T.cur === 'prov' || T.cur === 'color') && T.opt.fill) { fill(wx, wy); App.UI.refresh(); return; }
+      if (T.cur === 'war') { if (!T.activeNation) { App.UI.toast('请先在上方选择「进攻方」国家'); return; } if (T.opt.warMode !== 'brush') { App.War.annex(wx, wy); return; } App.War.startBrush(); }
       if (T.cur === 'nation' && !T.activeNation && !T.opt.erase) { App.UI.toast('请先在右侧「国家」面板选择或新建一个国家'); return; }
       if (T.cur === 'prov' && !T.activeProv && !T.opt.erase) { App.UI.toast('请先在右侧「行政区」面板选择或新建一个行政区'); return; }
       App.pushUndo(T.cur === "land" || T.cur === "color" ? ["terrain", "forest", "owner", "prov", "prov2", "prov3"] : T.cur === "terrain" ? ["terrain", "climate", "forest"] : T.cur === "forest" ? ["forest"] : ["owner", "prov", "prov2", "prov3"]);
@@ -422,7 +429,7 @@
   // 数字键选工具
   T.NUM_TOOLS = ['color', 'select', 'land', 'terrain', 'forest', 'river', 'nation', 'prov', 'city', 'army'];
   // 字母选工具（避开 WASD / Q / E）
-  T.KEY_TOOLS = { b: 'color', v: 'select', h: 'pan', l: 'land', t: 'terrain', f: 'forest', r: 'river', n: 'nation', p: 'prov', k: 'line', y: 'wall', c: 'city', j: 'army', u: 'arrow', m: 'marker', x: 'text' };
+  T.KEY_TOOLS = { b: 'color', v: 'select', h: 'pan', l: 'land', t: 'terrain', f: 'forest', r: 'river', n: 'nation', p: 'prov', k: 'line', y: 'wall', g: 'war', c: 'city', j: 'army', u: 'arrow', m: 'marker', x: 'text' };
   const key = (e) => {
     if (e.key === 'Shift') T.shiftDown = true;
     const tag = (e.target.tagName || '').toLowerCase();
@@ -471,7 +478,7 @@
   T.drawOverlay = (c, s) => {
     const m = T.mouse;
     T.drawBrushPreview(c, s);
-    if (m && BRUSH.includes(T.cur) && !((T.cur === 'nation' || T.cur === 'prov' || T.cur === 'color') && T.opt.fill)) {
+    if (m && BRUSH.includes(T.cur) && !(T.cur === 'war' && T.opt.warMode !== 'brush') && !((T.cur === 'nation' || T.cur === 'prov' || T.cur === 'color') && T.opt.fill)) {
       c.beginPath(); c.arc(m[0], m[1], T.opt.brush * C, 0, Math.PI * 2);
       c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.5 / s; c.stroke();
       c.strokeStyle = 'rgba(0,0,0,.6)'; c.lineWidth = 0.75 / s; c.stroke();
