@@ -238,7 +238,7 @@
     const act = (name, fn) => p.querySelectorAll(`[data-act=${name}]`).forEach((b) => (b.tagName === 'SELECT' || b.tagName === 'INPUT' ? (b.onchange = () => fn(b)) : (b.onclick = () => fn(b))));
     act('newCulture', (b) => (UI.newCulture = b.value));
     act('addNation', () => { App.pushUndo(); const n = App.Ops.addNation({ culture: UI.newCulture || 'huaxia' }); T().activeNation = n.id; T().activeProv = 0; if (!['nation', 'army', 'arrow'].includes(T().cur)) T().set('nation'); App.changed({ ui: true }); UI.refreshTool(); });
-    act('rndName', () => { App.pushUndo(); an.name = App.Names.nation(an.culture); App.changed({ ui: true }); UI.refreshTool(); });
+    act('rndName', () => { App.pushUndo(); an.name = App.Names.nationFor(an); App.changed({ ui: true }); UI.refreshTool(); });
     act('nCulture', (b) => { App.pushUndo(); an.culture = b.value; App.changed({ ui: true }); });
     act('rndAll', () => { App.pushUndo(); App.Ops.renameAll(an.id); App.changed({ ui: true }); UI.refreshTool(); });
     act('provK', (b) => (UI.provK = +b.value));
@@ -257,7 +257,7 @@
     act('recolor', () => { App.pushUndo(); App.Ops.recolor(); App.changed({ pol: true, ui: true }); });
     act("addSub", () => { App.pushUndo(); const pr = App.Ops.addProvince(an.id, null, (ap.level || 1) + 1, ap.id); UI.provOpen = UI.provOpen || {}; UI.provOpen[ap.id] = true; T().activeProv = pr.id; T().set("prov"); App.changed({ ui: true }); });
     act("addProv", () => { App.pushUndo(); const pr = App.Ops.addProvince(an.id, null, 1, 0); T().activeProv = pr.id; T().set('prov'); App.changed({ ui: true }); });
-    act('rndProv', () => { App.pushUndo(); Object.assign(ap, App.Names.provFor(an, ap.level || 1)); App.changed({ ui: true }); });
+    act('rndProv', () => { App.pushUndo(); App.PlaceNames.fitProvince(ap); App.changed({ ui: true }); });
     act("delProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.deleteProvince(ap.id); T().activeProv = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('loadRef', () => $('#fileImg').click());
     act('delRef', () => { S.meta.ref = null; App.changed({ ui: true }); });
@@ -301,7 +301,7 @@
       App.pushUndo();
       const c = App.Ops.cellAt(o.x ?? 0, o.y ?? 0), nn = App.nation(k === 'nationLabel' ? o.id : k === 'provLabel' ? o.nation : c >= 0 ? App.S.owner[c] : 0);
       const cul = nn ? nn.culture : 'huaxia';
-      if (k === 'nationLabel') o.name = App.Names.nation(cul); else if (k === "provLabel") Object.assign(o, App.Names.provFor(App.nation(o.nation), o.level || 1)); else if ('name' in o || k === 'cities') o.name = App.Names.city(cul);
+      if (k === 'nationLabel') o.name = App.Names.nationFor(o); else if (k === "provLabel") App.PlaceNames.fitProvince(o); else if (k === 'cities') o.name = App.Names.city(cul, undefined, o.x, o.y); else if ('name' in o) o.name = App.Names.city(cul);
       App.changed({ ui: true });
     };
   };
