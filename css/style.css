@@ -173,3 +173,30 @@ body.hide-panel #panel{display:none}
 .keys h4{grid-column:1/-1;margin:8px 0 2px;color:var(--gold)}
 .keys div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--line);padding:3px 0}
 kbd{display:inline-block;min-width:22px;text-align:center;padding:1px 6px;border:1px solid #556;border-bottom-width:2px;border-radius:5px;background:#232b3a;color:#f1e6cc;font-family:inherit;font-size:12px;margin:0 1px}
+/* 国力排名 / 国家档案 */
+.dlg.wide{max-width:1080px}
+.ptable{overflow-x:auto;margin:8px 0}
+.ptable table{width:100%;border-collapse:collapse;font-size:13.5px}
+.ptable th{text-align:left;color:var(--gold);font-weight:600;border-bottom:1px solid var(--line);padding:6px 8px;white-space:nowrap}
+.ptable td{padding:6px 8px;border-bottom:1px dashed var(--line);vertical-align:middle}
+.ptable tbody tr{cursor:pointer}.ptable tbody tr:hover{background:var(--panel2)}
+.ptable td small{color:var(--muted);font-size:11.5px}
+.ptable .pl{width:44px;text-align:center;font-weight:700}
+.ptable .sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:7px;vertical-align:-1px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.4)}
+.ptable .pw{min-width:170px;display:flex;align-items:center;gap:8px}
+.pbar{flex:1;height:9px;background:rgba(255,255,255,.07);border-radius:5px;overflow:hidden}.pbar i{display:block;height:100%;border-radius:5px}
+.phead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.phead i{width:10px;align-self:stretch;border-radius:4px;background:var(--c)}
+.phead h3{margin:0;font-size:24px}.phead small{color:var(--muted);font-size:13px}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.pgrid{grid-template-columns:1fr}}
+.pcard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.pcard h4{margin:0 0 6px;color:var(--gold)}
+.pcard .kv{display:flex;justify-content:space-between;gap:12px;padding:4px 0;border-bottom:1px dashed rgba(255,255,255,.06);font-size:13.5px}
+.pcard .kv span:first-child{color:var(--muted);white-space:nowrap}.pcard .kv span:last-child{text-align:right}
+.pcard .kv small{color:var(--muted)}.pcard a{color:#e9b86a;cursor:pointer;text-decoration:underline dotted}
+.pcard textarea{width:100%;box-sizing:border-box;resize:vertical}
+.pcard .field{margin:6px 0}.pcard .row{margin-top:6px}
+.tags{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.tags span{background:rgba(255,214,110,.08);border:1px solid rgba(255,214,110,.22);border-radius:10px;padding:1px 8px;font-size:12px}
+.alist{max-height:170px;overflow-y:auto;margin-top:4px}.alist div{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0;border-bottom:1px dashed rgba(255,255,255,.06)}
+.alist div span:last-child{color:var(--muted)}
