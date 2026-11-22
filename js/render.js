@@ -29,7 +29,7 @@
     if (m.showArmies) for (const a of S.armies) ak = (ak * 7 + a.x + a.y * 3) % 1e9;
     for (const n of S.nations) nk = (nk * 31 + sh(n.name) + sh(n.color)) | 0;
     for (const p of S.provinces) pk = (pk * 31 + sh(p.name) + p.id) | 0;
-    const f = (m.showProvLabels ? 1 : 0) + (m.lv1 ? 2 : 0) + (m.lv2 ? 4 : 0) + (m.lv3 ? 8 : 0) + (m.cityStyle === "icon" ? 16 : 0) + (m.showCityLabels ? 32 : 0) + (m.showArmies ? 64 : 0);
+    const f = ({ pol: 128, phys: 256 }[R.mode()] || 0) + (m.showProvLabels ? 1 : 0) + (m.lv1 ? 2 : 0) + (m.lv2 ? 4 : 0) + (m.lv3 ? 8 : 0) + (m.cityStyle === "icon" ? 16 : 0) + (m.showCityLabels ? 32 : 0) + (m.showArmies ? 64 : 0);
     return [App.Geo.polVer, Math.round(Math.log(s) * 30), f, R.fontVer, ck, ak, nk, pk, sh(m.style), sh(m.labelFont), sh(m.latinFont)];
   };
 
@@ -48,6 +48,8 @@
     R.request();
   };
   R.toWorld = (sx, sy) => [(sx - R.view.ox) / R.view.s, (sy - R.view.oy) / R.view.s];
+  // 当前地图模式；画地形、森林、河流、陆海时自动看到地形
+  R.mode = () => { const m = App.S.nations.length ? App.S.meta.mapMode || 'pol' : 'all', t = App.Tools && App.Tools.cur; return m === 'pol' && ['terrain', 'forest', 'river', 'land'].includes(t) ? 'all' : m; };
   R.request = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; R.draw(); }); };
 
   const isLatin = (t) => /^[\x00-\x7FÀ-ɏ\s'’-]+$/.test(t);
@@ -93,30 +95,34 @@
     const coast = vec || G.coastPath;
     c.save(); c.clip(coast, 'evenodd');
     c.fillStyle = '#f1e9d6'; c.fillRect(0, 0, WW, HH);
-    c.globalAlpha = st.tintA; c.drawImage(G.tintCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
-    S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.fillStyle = U.rgba(n.color, st.nationA); c.fill(p, 'evenodd'); });
+    // 地图模式：政区（不画山、林、河）/ 地形（不画国家填色和行政区）/ 综合
+    const MODE = R.mode(), POL = MODE !== 'phys', PHY = MODE !== 'pol';
+    c.globalAlpha = st.tintA * (PHY ? 1 : 0.3); c.drawImage(G.tintCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
+    if (POL) S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.fillStyle = U.rgba(n.color, st.nationA); c.fill(p, 'evenodd'); });
     // 附庸 / 封国：叠一层宗主颜色的斜纹
-    if (S.meta.showVassal !== false) S.nations.forEach((n) => { const ov = n.overlord && App.nation(n.overlord), p = G.nationPaths.get(n.id); if (!ov || !p) return; c.fillStyle = vassalPat(c, ov.color); c.globalAlpha = Math.min(0.5, st.nationA * 0.7); c.fill(p, 'evenodd'); c.globalAlpha = 1; });
-    c.globalAlpha = st.band; c.drawImage(G.bandCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
+    if (POL && S.meta.showVassal !== false) S.nations.forEach((n) => { const ov = n.overlord && App.nation(n.overlord), p = G.nationPaths.get(n.id); if (!ov || !p) return; c.fillStyle = vassalPat(c, ov.color); c.globalAlpha = Math.min(0.5, st.nationA * 0.7); c.fill(p, 'evenodd'); c.globalAlpha = 1; });
+    c.globalAlpha = POL ? st.band : 0; c.drawImage(G.bandCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
     if (S.meta.showClimate) { c.globalAlpha = 0.62; c.drawImage(App.Climate.canvas, 0, 0, WW, HH); c.globalAlpha = 1; }
     c.globalAlpha = st.paper; c.globalCompositeOperation = 'multiply'; c.fillStyle = pats.paper; c.fillRect(0, 0, WW, HH); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1;
     if (st.aged) { c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(222,200,158)'; c.fillRect(0, 0, WW, HH); c.globalCompositeOperation = 'source-over'; }
     // 行政区界（三级，从细到粗）
-    if (G.provPaths) for (let lv = 3; lv >= 1; lv--) {
+    if (POL && G.provPaths) for (let lv = 3; lv >= 1; lv--) {
       if (!S.meta['lv' + lv] || !G.provPaths[lv]) continue;
       if (lv === 1 && st.provHalo) { c.setLineDash([]); c.strokeStyle = st.provHalo; c.lineWidth = sw(st.provW[0] + 1.6); c.stroke(G.provPaths[1]); }
       const d = st.provDash[lv - 1]; c.setLineDash(d ? d.map(sw) : []);
       c.strokeStyle = st.prov[lv - 1]; c.lineWidth = sw(st.provW[lv - 1]); c.stroke(G.provPaths[lv]);
     }
     c.setLineDash([]);
-    S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.strokeStyle = U.shade(n.color, st.borderShade); c.lineWidth = sw(st.borderW); c.stroke(p); });
+    if (!POL) c.setLineDash([sw(5), sw(3)]);
+    S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.strokeStyle = POL ? U.shade(n.color, st.borderShade) : 'rgba(90,30,20,.6)'; c.lineWidth = sw(POL ? st.borderW : 1.3); c.stroke(p); });
+    c.setLineDash([]);
     c.restore();
     if (!exp && App.Tools && App.Tools.wetOn) { App.Tools.flushWet(); c.save(); c.imageSmoothingEnabled = false; c.globalAlpha = Math.min(0.85, st.nationA + 0.05); c.drawImage(App.Tools.wet, 0, 0, WW, HH); c.restore(); c.imageSmoothingEnabled = true; }
     // 海岸线
     if (vec && G.lakePath) { c.fillStyle = S.meta.ocean || st.ocean; c.fill(G.lakePath, "evenodd"); c.globalAlpha = st.seaAlpha; c.fillStyle = pats.sea; c.fill(G.lakePath, "evenodd"); c.globalAlpha = 1; c.strokeStyle = st.coast; c.lineWidth = sw(st.coastW * 0.8); c.stroke(G.lakePath); }
     c.strokeStyle = st.coast; c.lineWidth = sw(st.coastW); c.lineJoin = 'round'; c.stroke(coast);
     // 地形 & 森林图标
-    if (S.meta.showIcons && G.icons) {
+    if (PHY && S.meta.showIcons && G.icons) {
       const dens = U.clamp(s * 1.6, 0.35, 1);
       const inkMap = { mtn: 'inkMtn', snow: 'inkSnow', hill: 'inkHill' };
       for (const ic of G.icons) {
@@ -129,7 +135,7 @@
       }
     }
     c.lineCap = 'round'; c.lineJoin = 'round';
-    S.rivers.forEach((r) => drawRiver(c, r, sw, st));
+    if (PHY) S.rivers.forEach((r) => drawRiver(c, r, sw, st));
     S.lines.forEach((l) => drawLine(c, l, sw));
     if (S.meta.showArmies) S.arrows.forEach((a) => drawArrow(c, a, sw));
     S.markers.forEach((m) => drawMarker(c, m, s, sw));
@@ -484,13 +490,13 @@
       const info = G.labels.get(n.id); if (!info || !n.name) return;
       place({ name: n.name, info, kind: 'nation', id: n.id, weight: /[一-鿿]/.test(n.name) ? 900 : 800, fill: st.label(n), halo: st.labelHalo, maxW: 130, k: 1, maxScr: 72, minScr: 11, arr: S.owner, must: true });
     });
-    if (!S.meta.showProvLabels) return;
+    if (!S.meta.showProvLabels || R.mode() === 'phys') return;
     const PSZ = { 1: [30, 0.62, 34, 8], 2: [20, 0.48, 24, 7], 3: [13, 0.36, 17, 6.5] };
     [1, 2, 3].forEach((lv) => {
       if (!S.meta['lv' + lv]) return;
       S.provinces.filter((p) => (p.level || 1) === lv && p.name).map((p) => [p, G.provLabels.get(p.id)]).filter(([, i]) => i).sort((a, b) => b[1].n - a[1].n).forEach(([p, info]) => {
         const n = App.nation(p.nation); if (!n) return;
-        place({ name: p.name, info, kind: 'prov', id: p.id, weight: lv === 1 ? 700 : 500, fill: st.provLabel || U.rgba(U.shade(n.color, -0.7), 0.75), halo: null, maxW: PSZ[lv][0], k: PSZ[lv][1], maxScr: PSZ[lv][2], minScr: PSZ[lv][3], arr: App.provArr(lv) });
+        place({ name: p.name, info, kind: 'prov', id: p.id, weight: lv === 1 ? 700 : 500, fill: lv === 1 ? 'rgba(70,24,12,.88)' : st.provLabel || U.rgba(U.shade(n.color, -0.7), 0.72), halo: lv === 1 ? 'rgba(245,232,205,.6)' : null, maxW: PSZ[lv][0], k: PSZ[lv][1], maxScr: PSZ[lv][2], minScr: PSZ[lv][3], arr: App.provArr(lv) });
       });
     });
   };
