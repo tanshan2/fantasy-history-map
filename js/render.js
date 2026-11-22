@@ -49,7 +49,7 @@
   };
   R.toWorld = (sx, sy) => [(sx - R.view.ox) / R.view.s, (sy - R.view.oy) / R.view.s];
   // 当前地图模式；画地形、森林、河流、陆海时自动看到地形
-  R.mode = () => { const m = App.S.nations.length ? App.S.meta.mapMode || 'pol' : 'all', t = App.Tools && App.Tools.cur; return m === 'pol' && ['terrain', 'forest', 'river', 'land'].includes(t) ? 'all' : m; };
+  R.mode = () => { const m = App.S.nations.length ? App.S.meta.mapView || 'all' : 'all', t = App.Tools && App.Tools.cur; return m === 'pol' && ['terrain', 'forest', 'river', 'land'].includes(t) ? 'all' : m; };
   R.request = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; R.draw(); }); };
 
   const isLatin = (t) => /^[\x00-\x7FÀ-ɏ\s'’-]+$/.test(t);
@@ -98,7 +98,25 @@
     // 地图模式：政区（不画山、林、河）/ 地形（不画国家填色和行政区）/ 综合
     const MODE = R.mode(), POL = MODE !== 'phys', PHY = MODE !== 'pol';
     c.globalAlpha = st.tintA * (PHY ? 1 : 0.3); c.drawImage(G.tintCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
-    if (POL) S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.fillStyle = U.rgba(n.color, st.nationA); c.fill(p, 'evenodd'); });
+    // 地形 & 森林图标
+    if (PHY && S.meta.showIcons && G.icons) {
+      c.globalAlpha = POL ? 0.78 : 1;
+      const dens = U.clamp(s * 1.6, 0.35, 1);
+      const inkMap = { mtn: 'inkMtn', snow: 'inkSnow', hill: 'inkHill' };
+      for (const ic of G.icons) {
+        if (!inView(ic.x, ic.y)) continue;
+        if (ic.k.startsWith('tree') && ic.r > 0.15 * dens) continue;
+        const key = st.ink && inkMap[ic.k] ? inkMap[ic.k] : ic.k;
+        const spr = App.Sprites[key]; if (!spr) continue;
+        const im = spr[ic.v], w = ic.s * (key === 'inkHill' ? 0.9 : 1), h = (w * im.height) / im.width;
+        c.drawImage(im, ic.x - w / 2, ic.y - h + w * 0.08, w, h);
+      }
+      c.globalAlpha = 1;
+    }
+    // 河流嵌在地面里：画在国家颜色之下
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    if (PHY) S.rivers.forEach((r) => drawRiver(c, r, sw, st));
+    if (POL) { c.globalCompositeOperation = 'multiply'; S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.fillStyle = U.rgba(U.shade(n.color, 0.12), st.nationA * 0.8); c.fill(p, 'evenodd'); }); c.globalCompositeOperation = 'source-over'; }
     // 附庸 / 封国：叠一层宗主颜色的斜纹
     if (POL && S.meta.showVassal !== false) S.nations.forEach((n) => { const ov = n.overlord && App.nation(n.overlord), p = G.nationPaths.get(n.id); if (!ov || !p) return; c.fillStyle = vassalPat(c, ov.color); c.globalAlpha = Math.min(0.5, st.nationA * 0.7); c.fill(p, 'evenodd'); c.globalAlpha = 1; });
     c.globalAlpha = POL ? st.band : 0; c.drawImage(G.bandCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
@@ -121,21 +139,7 @@
     // 海岸线
     if (vec && G.lakePath) { c.fillStyle = S.meta.ocean || st.ocean; c.fill(G.lakePath, "evenodd"); c.globalAlpha = st.seaAlpha; c.fillStyle = pats.sea; c.fill(G.lakePath, "evenodd"); c.globalAlpha = 1; c.strokeStyle = st.coast; c.lineWidth = sw(st.coastW * 0.8); c.stroke(G.lakePath); }
     c.strokeStyle = st.coast; c.lineWidth = sw(st.coastW); c.lineJoin = 'round'; c.stroke(coast);
-    // 地形 & 森林图标
-    if (PHY && S.meta.showIcons && G.icons) {
-      const dens = U.clamp(s * 1.6, 0.35, 1);
-      const inkMap = { mtn: 'inkMtn', snow: 'inkSnow', hill: 'inkHill' };
-      for (const ic of G.icons) {
-        if (!inView(ic.x, ic.y)) continue;
-        if (ic.k.startsWith('tree') && ic.r > 0.15 * dens) continue;
-        const key = st.ink && inkMap[ic.k] ? inkMap[ic.k] : ic.k;
-        const spr = App.Sprites[key]; if (!spr) continue;
-        const im = spr[ic.v], w = ic.s * (key === 'inkHill' ? 0.9 : 1), h = (w * im.height) / im.width;
-        c.drawImage(im, ic.x - w / 2, ic.y - h + w * 0.08, w, h);
-      }
-    }
     c.lineCap = 'round'; c.lineJoin = 'round';
-    if (PHY) S.rivers.forEach((r) => drawRiver(c, r, sw, st));
     S.lines.forEach((l) => drawLine(c, l, sw));
     if (S.meta.showArmies) S.arrows.forEach((a) => drawArrow(c, a, sw));
     S.markers.forEach((m) => drawMarker(c, m, s, sw));
