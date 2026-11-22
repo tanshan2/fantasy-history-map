@@ -110,7 +110,7 @@
     const pj = g && App.Templates && App.Templates.PROJ[g];
     const km = (a, b) => { const la = ((a[1] + b[1]) / 2) * Math.PI / 180; return Math.hypot((b[0] - a[0]) * Math.cos(la), b[1] - a[1]) * 111.32; };
     for (let y = 0; y < H; y++) {
-      if (!pj) { rowArea[y] = 400; continue; }
+      if (!pj) { rowArea[y] = 150; continue; } // 非真实地图：每格约 12 公里见方
       const x = W / 2, p0 = pj.inv(x, y + 0.5), p1 = pj.inv(x + 1, y + 0.5), p2 = pj.inv(x, y + 1.5);
       rowArea[y] = km(p0, p1) * km(p0, p2);
     }
