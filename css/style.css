@@ -200,3 +200,21 @@ kbd{display:inline-block;min-width:22px;text-align:center;padding:1px 6px;border
 .tags{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.tags span{background:rgba(255,214,110,.08);border:1px solid rgba(255,214,110,.22);border-radius:10px;padding:1px 8px;font-size:12px}
 .alist{max-height:170px;overflow-y:auto;margin-top:4px}.alist div{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0;border-bottom:1px dashed rgba(255,255,255,.06)}
 .alist div span:last-child{color:var(--muted)}
+/* 国家档案：编辑控件（深色底、浅色字） */
+.dlg input[type=text],.dlg input[type=number],.dlg input:not([type]),.dlg select,.dlg textarea{background:#121822;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 7px;min-width:0}
+.dlg textarea{line-height:1.6}
+.dlg input:focus,.dlg select:focus,.dlg textarea:focus{outline:none;border-color:var(--gold)}
+.dlg input[type=color]{width:52px;height:28px;border:1px solid var(--line);border-radius:6px;background:none;padding:1px}
+.egrid{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;margin-bottom:8px}
+.egrid>label{color:var(--muted);font-size:13px;white-space:nowrap}
+.egrid .row{margin:0;gap:6px}.egrid .row input[type=text]{flex:1}
+.egrid small{color:var(--muted);white-space:nowrap}
+.elist{max-height:260px;overflow-y:auto;margin:6px 0;padding-right:2px}
+.erow{display:flex;align-items:center;gap:5px;padding:2px 0}
+.erow input[type=text]{flex:1}.erow select{flex:none;max-width:110px}
+.erow small{color:var(--muted);font-size:11px;white-space:nowrap}
+.erow .x{flex:none;width:24px;height:26px;border:1px solid var(--line);background:#121822;border-radius:5px;cursor:pointer;padding:0;color:var(--ink)}
+.erow .x:hover{border-color:var(--gold)}.erow .x.del:hover{border-color:#c25a3a;color:#ff9b85}.erow span.x{border:0;background:none}
+.esub{margin-left:18px;border-left:1px dashed var(--line);padding-left:6px}
+.erow.lv2 input{font-size:13px}.erow.lv3 input{font-size:12.5px}
+.btn.small{padding:3px 9px;font-size:12.5px}
