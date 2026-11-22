@@ -122,10 +122,12 @@
         seeds[i] = bj;
       }
     }
-    const target = L / k, mult = seeds.map(() => 0.85 + r() * 0.3); let who;
+    // 均衡目标按「人口」而不是格数：富庶地方的区小，草原荒漠的区大
+    const wt = new Float32Array(L); let wsum = 0; cells.forEach((c, j) => { wt[j] = POPW ? POPW[c] : 1; wsum += wt[j]; });
+    const target = wsum / k, mult = seeds.map(() => 0.85 + r() * 0.3); let who;
     for (let it = 0; it < 5; it++) {
       who = grow(mult);
-      const size = new Float64Array(k); for (let j = 0; j < L; j++) if (who[j] >= 0) size[who[j]]++;
+      const size = new Float64Array(k); for (let j = 0; j < L; j++) if (who[j] >= 0) size[who[j]] += wt[j];
       let worst = 0; for (let i = 0; i < k; i++) { const q = size[i] / target; worst = Math.max(worst, q, 1 / Math.max(q, 0.05)); mult[i] *= U.clamp(Math.pow(Math.max(q, 0.05), 0.55), 0.6, 1.7); }
       if (worst < 1.6) break;
     }
@@ -161,7 +163,7 @@
       if (biggest.get(p.id) === p) return;
       const touch = new Map(); p.comp.forEach((j) => nbs(j, (q) => { if (idx[q] !== p.id) touch.set(idx[q], (touch.get(idx[q]) || 0) + 1); }));
       let to = -1, bt = 0; touch.forEach((v, key) => { if (v > bt) { bt = v; to = key; } });
-      if (to < 0) { if (p.comp.length >= target * 0.3) return; const [x, y] = xy(p.comp[0]); let bd = Infinity; seeds.forEach((s, t) => { const [sx, sy] = xy(s), d = (sx - x) ** 2 + (sy - y) ** 2; if (d < bd && t !== p.id) { bd = d; to = t; } }); }
+      if (to < 0) { if (p.comp.length >= (L / k) * 0.3) return; const [x, y] = xy(p.comp[0]); let bd = Infinity; seeds.forEach((s, t) => { const [sx, sy] = xy(s), d = (sx - x) ** 2 + (sy - y) ** 2; if (d < bd && t !== p.id) { bd = d; to = t; } }); }
       if (to >= 0) p.comp.forEach((j) => (idx[j] = to));
     });
     cells.forEach((c) => (LOC[c] = -1));
@@ -170,28 +172,37 @@
 
   // 自动划分行政区：数量按「真实面积 ÷ 该制度各级单位的历史典型面积」来定，再受历史上下辖数量范围约束
   // 例如明代一省约 22 万平方公里、一府约 2.5 万、一县约 3500；唐代一道约 40 万、一州约 1.5 万
-  const MINC = [0, 40, 16, 6]; // 地图分辨率限制：每级单位至少占的格数
-  const areaOf = (cells) => { const ra = App.Polity.rowAreas(); let a = 0; cells.forEach((c) => (a += ra[(c / W) | 0])); return a; };
+  const MINC = [0, 120, 45, 22]; // 地图分辨率限制：每级单位至少占的格数（太小的县在地图上画不出来）
+  // 人口权重：按土地丰饶度（地貌×气候×河流），富庶平原 1，草原约 0.3，荒漠高原约 0.15
+  let POPW = null;
+  const buildPopW = () => { const rv = riverCached(); POPW = new Float32Array(N); for (let c = 0; c < N; c++) if (App.S.terrain[c] >= 2) POPW[c] = 0.15 + 0.85 * Math.min(1, App.Polity.fertility(c, rv)); };
+  // 人口面积 = 面积 × 人口权重（数量按这个算）
+  const areaOf = (cells) => { const ra = App.Polity.rowAreas(); let a = 0; cells.forEach((c) => (a += ra[(c / W) | 0] * (POPW ? POPW[c] : 1))); return a; };
   O.unitArea = (sys, level) => { const a = App.ADMIN_AREA[App.sysKeyOf(sys)] || [0, 200000, 25000, 3500]; return a[level] || a[a.length - 1] / 6; };
   const kidCount = (sys, level, cells, r) => {
     const [lo, hi] = sys.kids[level] || [3, 8];
     const cap = Math.floor(cells.length / MINC[level]); if (cap < 2) return 1;
     const want = Math.round((areaOf(cells) / O.unitArea(sys, level)) * (0.88 + r() * 0.24));
-    return Math.max(2, Math.min(cap, U.clamp(want, lo, Math.round(hi * 1.5))));
+    return Math.max(2, Math.min(cap, U.clamp(want, lo, hi)));
   };
   O.autoProvinces = (nid, k1, r = Math.random, opts = {}) => {
     const S = App.S, n = App.nation(nid); if (!n) return;
     const sys = App.sysOf(n), maxLv = sys.levels;
     const cells = []; for (let c = 0; c < N; c++) if (S.owner[c] === nid && S.terrain[c] >= 2) cells.push(c);
+    buildPopW();
     if (!opts.keepL1) O.deleteProvinces(S.provinces.filter((p) => p.nation === nid).map((p) => p.id));
     else O.deleteProvinces(S.provinces.filter((p) => p.nation === nid && (p.level || 1) > 1).map((p) => p.id));
     if (!cells.length) return;
     const sub = (parentCells, level, parent, kk) => {
       const { k, idx } = O.splitCells(parentCells, kk, r, (parent ? parent.id : nid) * 7 + level);
-      const ps = []; for (let i = 0; i < k; i++) ps.push(O.addProvince(nid, App.Names.provFor(n, level, r), level, parent ? parent.id : 0));
-      const groups = ps.map(() => []);
-      parentCells.forEach((c, j) => { App.provArr(level)[c] = ps[idx[j]].id; groups[idx[j]].push(c); });
-      if (level < maxLv) ps.forEach((p, i) => { const g = groups[i]; if (g.length) sub(g, level + 1, p, kidCount(sys, level + 1, g, r)); });
+      // 先分组，只为真正有领土的块建立行政区（不会出现空壳县）
+      const groups = Array.from({ length: k }, () => []);
+      parentCells.forEach((c, j) => groups[idx[j]].push(c));
+      groups.filter((g) => g.length).forEach((g) => {
+        const p = O.addProvince(nid, App.Names.provFor(n, level, r), level, parent ? parent.id : 0);
+        const arr = App.provArr(level); g.forEach((c) => (arr[c] = p.id));
+        if (level < maxLv) sub(g, level + 1, p, kidCount(sys, level + 1, g, r));
+      });
     };
     if (opts.keepL1) {
       cells.forEach((c) => { S.prov2[c] = 0; S.prov3[c] = 0; });
