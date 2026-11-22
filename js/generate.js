@@ -84,6 +84,8 @@
     for (let c = 0; c < N; c++) if (S.terrain[c] >= 2 && who[c] >= 0) S.owner[c] = nations[who[c]].id;
     // 去掉过小的国家
     S.nations.slice().forEach((n) => { let k = 0; for (let c = 0; c < N; c++) if (S.owner[c] === n.id) k++; if (k < 60) App.Ops.deleteNation(n.id); });
+    // 按领土位置起国名（华夏：北方燕赵、南方楚越），且不重名
+    S.nations.forEach((n) => (n.name = '')); S.nations.forEach((n) => (n.name = App.Names.nationFor(n, r)));
     App.Ops.recolor(r);
     S.nations.forEach((n) => {
       let k = 0; for (let c = 0; c < N; c++) if (S.owner[c] === n.id) k++;
