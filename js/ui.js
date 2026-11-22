@@ -139,7 +139,10 @@
     const S = App.S, an = App.nation(T().activeNation);
     const counts = new Map(); for (let c = 0; c < App.N; c++) { const o = S.owner[c]; if (o) counts.set(o, (counts.get(o) || 0) + 1); }
     let h = `<div class="row"><button class="btn pri" data-act="addNation">＋ 新建国家</button><select data-act="newCulture" title="新国家的文明">${App.CULTURES.map((c) => `<option value="${c.id}" ${c.id === UI.newCulture ? 'selected' : ''}>${c.name}</option>`).join('')}</select></div>`;
-    h += '<ul class="list">' + S.nations.map((n) => `<li class="${n.id === T().activeNation ? 'on' : ''}" data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name) || "（未命名）"}</span><small>${App.Polity.title(n).name}${n.overlord ? '·附庸' : ''} · ${counts.get(n.id) || 0}格</small></li>`).join('') + '</ul>';
+    if (UI.multiCard) h += UI.multiCard();
+    const MS = T().multi || new Set();
+    if (S.nations.length > 1 && !MS.size) h += '<p class="muted" style="margin:4px 0">勾选方框或 Shift / Ctrl + 点击可多选国家，批量设附庸、改国体等。</p>';
+    h += '<ul class="list">' + S.nations.map((n) => `<li class="${n.id === T().activeNation ? 'on' : ''} ${MS.has(n.id) ? 'msel' : ''}" data-nation="${n.id}"><input type="checkbox" class="mck" data-mck="${n.id}" ${MS.has(n.id) ? 'checked' : ''} title="多选"><i style="background:${n.color}"></i><span>${U.esc(n.name) || "（未命名）"}</span><small>${App.Polity.title(n).name}${n.overlord ? '·附庸' : ''} · ${counts.get(n.id) || 0}格</small></li>`).join('') + '</ul>';
     if (!S.nations.length) h += '<p class="muted">还没有国家。新建一个，然后用左侧「国家」工具在地图上涂色。</p>';
     if (an) {
       h += `<div class="card"><h4>编辑：${U.esc(an.name) || "未命名区域"}</h4>
@@ -214,7 +217,13 @@
   // ---------- 面板事件 ----------
   const bind = (p) => {
     const S = App.S;
-    p.querySelectorAll('[data-nation]').forEach((li) => (li.onclick = () => T().highlight(+li.dataset.nation)));
+    p.querySelectorAll('[data-nation]').forEach((li) => (li.onclick = (ev) => {
+      if (ev.target.classList && ev.target.classList.contains('mck')) return;
+      if (li.closest('.list') && (ev.shiftKey || ev.ctrlKey || ev.metaKey) && UI.toggleMulti) { UI.toggleMulti(+li.dataset.nation); return; }
+      T().highlight(+li.dataset.nation);
+    }));
+    p.querySelectorAll('[data-mck]').forEach((c) => (c.onchange = () => UI.toggleMulti(+c.dataset.mck)));
+    if (UI.bindMulti) UI.bindMulti(p);
     p.querySelectorAll('[data-zoom]').forEach((b) => (b.onclick = () => { const comps = App.Geo.nationComps(+b.dataset.zoom), k = b.dataset.comp; if (!comps.length) return; if (k === 'all') { const bx = comps.reduce((a, q) => [Math.min(a[0], q.box[0]), Math.min(a[1], q.box[1]), Math.max(a[2], q.box[2]), Math.max(a[3], q.box[3])], [1e9, 1e9, -1e9, -1e9]); App.R.zoomToBox(bx); } else App.R.zoomToBox(comps[+k].box, 0.35); T().highlight(+b.dataset.zoom); }));
     p.querySelectorAll("[data-ptog]").forEach((e) => (e.onclick = (ev) => { ev.stopPropagation(); UI.provOpen = UI.provOpen || {}; UI.provOpen[e.dataset.ptog] = !UI.provOpen[e.dataset.ptog]; UI.refresh(); }));
     p.querySelectorAll("[data-prov]").forEach((li) => (li.onclick = () => { T().activeProv = +li.dataset.prov; if (T().cur !== "prov") T().set("prov"); UI.refresh(); UI.refreshTool(); }));
@@ -391,7 +400,7 @@
       ${row(K('9') + ' / ' + K('C'), '城市')}${row(K('0') + ' / ' + K('J'), '军队')}
       ${row(K('H'), '平移')}${row(K('K'), '线条')}${row(K('U'), '进军箭头')}${row(K('M'), '标记')}${row(K('X'), '文字')}
       <h4>国家</h4>
-      ${row(K('I'), '国家档案（当前高亮或选中的国家）')}${row(K('O'), '国力排名')}
+      ${row(K('I'), '国家档案（当前高亮或选中的国家）')}${row(K('O'), '国力排名')}${row(K('Shift') + ' / ' + K('Ctrl') + ' + 点击', '多选国家（地图或列表），批量设附庸、改国体等')}${row(K('Esc'), '清空多选')}
       <h4>画笔</h4>
       ${row(K('[') + ' ' + K(']'), '笔刷变小 / 变大（加 Shift 每次 5）')}
       ${row(K('Alt') + ' + 滚轮', '调笔刷大小')}
