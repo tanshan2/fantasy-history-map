@@ -451,6 +451,8 @@
     if (e.key === ']' || e.key === '}') { T.opt.brush = Math.min(40, T.opt.brush + step); App.UI.refreshTool(); App.R.request(); return; }
     if (k === 'z' && ['color', 'nation', 'prov'].includes(T.cur)) { T.opt.erase = !T.opt.erase; App.UI.refreshTool(); App.UI.toast(T.opt.erase ? '橡皮' : '涂色'); return; }
     if (k === 'g' && ['color', 'nation', 'prov'].includes(T.cur)) { T.opt.fill = !T.opt.fill; App.UI.refreshTool(); App.R.request(); App.UI.toast(T.opt.fill ? '油漆桶' : '笔刷'); return; }
+    if (k === 'i') { App.UI.profileCurrent(); return; }
+    if (k === 'o') { App.UI.powerDialog(); return; }
     // —— 选工具 ——
     if (/^Digit[0-9]$/.test(e.code)) { const i = (+e.code.slice(5) + 9) % 10; if (T.NUM_TOOLS[i]) T.set(T.NUM_TOOLS[i]); return; }
     if (T.KEY_TOOLS[k]) T.set(T.KEY_TOOLS[k]);
