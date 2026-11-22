@@ -11,7 +11,11 @@
     if (!id) return; const m = M();
     if (m.has(id)) m.delete(id); else m.add(id);
     if (m.size && UI.tab !== 'nations') UI.tab = 'nations';
+    // 刷新后让点中的那一行停在屏幕原位置（上方插入批量面板也不会跳）
+    const panel = document.getElementById('panel'), q = () => document.querySelector(`#tabBody .list li[data-nation="${id}"]`);
+    const a0 = q(), y0 = a0 ? a0.getBoundingClientRect().top : null;
     App.R.request(); UI.refresh();
+    const a1 = q(); if (y0 != null && a1) panel.scrollTop += a1.getBoundingClientRect().top - y0;
     if (m.size === 1) UI.toast('已多选 1 个国家：继续 Shift/Ctrl + 点击添加更多，右侧面板可批量修改');
   };
   UI.clearMulti = () => { M().clear(); App.R.request(); UI.refresh(); };
