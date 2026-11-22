@@ -295,6 +295,7 @@
     if (e.button === 1 || e.button === 2 || spaceDown || T.cur === 'pan') { drag = { type: 'pan', sx, sy, ox: App.R.view.ox, oy: App.R.view.oy }; canvas.style.cursor = 'grabbing'; return; }
     if (T.cur === 'select') {
       const h = T.hit(wx, wy);
+      if (h && h.kind === 'nationLabel' && (e.shiftKey || e.ctrlKey || e.metaKey) && App.UI.toggleMulti) { App.UI.toggleMulti(h.id); drag = null; return; }
       if (h) {
         if (!(T.sel && T.sel.kind === h.kind && T.sel.id === h.id)) T.select({ kind: h.kind, id: h.id });
         if (h.kind === 'nationLabel') T.highlight(h.id);
@@ -359,7 +360,7 @@
     if (d.type === 'brush') T.endStroke();
     // 选择工具：在地图上轻点（没拖动）= 选中这块领土的国家并高亮
     if (d.type === 'pan' && d.click && T.cur === 'select') {
-      const [ux, uy] = pos(e); if (Math.hypot(ux - d.sx, uy - d.sy) < 5) { const c = App.Ops.cellAt(d.wx, d.wy), o = c >= 0 ? App.S.owner[c] : 0; T.highlight(o, true); }
+      const [ux, uy] = pos(e); if (Math.hypot(ux - d.sx, uy - d.sy) < 5) { const c = App.Ops.cellAt(d.wx, d.wy), o = c >= 0 ? App.S.owner[c] : 0; if ((e.shiftKey || e.ctrlKey || e.metaKey) && App.UI.toggleMulti) { if (o) App.UI.toggleMulti(o); } else T.highlight(o, true); }
     }
     if (d.type === 'move' && d.pushed) { App.changed({}); App.UI.showSelection(); }
     if (d.type === 'line') {
@@ -441,7 +442,7 @@
     }
     if (e.code === 'Space') { spaceDown = true; e.preventDefault(); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); T.deleteSel(); return; }
-    if (e.key === 'Escape') { drag = null; if (T.hl) { T.highlight(0); return; } if (T.sel) { T.select(null); return; } T.set('select'); return; }
+    if (e.key === 'Escape') { drag = null; if (T.multi && T.multi.size) { App.UI.clearMulti(); return; } if (T.hl) { T.highlight(0); return; } if (T.sel) { T.select(null); return; } T.set('select'); return; }
     if (e.key === 'Home') { e.preventDefault(); App.R.fit(); return; }
     if (e.key === 'Tab') { e.preventDefault(); document.body.classList.toggle('hide-panel'); setTimeout(App.R.resize, 30); return; }
     if (e.key === '?' || e.key === 'F1') { e.preventDefault(); App.UI.help(); return; }
