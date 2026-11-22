@@ -36,7 +36,7 @@
     const st = S(), cul = o.culture || 'huaxia';
     const b = o.base || App.Names.familyBase(cul, r);
     const fam = {
-      id: App.nid(), base: b, name: o.name || App.Names.familyName(cul, b), culture: cul, religion: o.religion || (isLatin(cul) ? '天主教' : cul === 'huaxia' ? '儒教' : cul === 'wa' ? '神道' : cul === 'tianzhu' ? '印度教' : cul === 'persia' ? '祆教' : '萨满'),
+      id: App.nid(), base: b, name: o.name || App.Names.familyName(cul, b), culture: cul, religion: o.religion || (App.CULT_RELIGION && App.CULT_RELIGION[cul]) || (isLatin(cul) ? '天主教' : cul === 'huaxia' ? '儒教' : cul === 'wa' ? '神道' : cul === 'tianzhu' ? '印度教' : cul === 'persia' ? '祆教' : '萨满'),
       color: o.color || App.PALETTE[ri(r, 0, App.PALETTE.length - 1)], nation: o.nation || 0, home: o.home || 0,
       founded: o.founded ?? year() - ri(r, 20, 200), influence: ri(r, 30, 200), merit: ri(r, 0, 160), conquered: ri(r, 0, 6),
       patriarch: 0, relations: [], history: '',
