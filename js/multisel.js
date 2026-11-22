@@ -25,22 +25,29 @@
   UI.multiCard = () => {
     const ns = sel(); if (!ns.length) return '';
     const ids = new Set(ns.map((n) => n.id));
+    // 所选国家的当前值：一致就显示该值，不一致显示「各不相同」
+    const common = (f) => { const v = f(ns[0]); return ns.every((n) => f(n) === v) ? v : undefined; };
+    const head = (v) => `<option value="" ${v === undefined ? 'selected' : ''}>${v === undefined ? '— 各不相同（选一项统一修改）—' : '— 不改 —'}</option>`;
+    const cOv = common((n) => String(n.overlord || 0));
+    const cVas = common((n) => (n.rank === 'fief' ? (n.fiefSys || 'zhou') + ':' + P.fiefTier(n).id : 'keep'));
+    const cRank = common((n) => (n.rank === 'fief' ? ((n.fiefSys || 'zhou') === 'zhou' ? 'zhou:' + P.fiefTier(n).id : 'fief') : P.rankOf(n).id));
+    const cCul = common((n) => n.culture), cSys = common((n) => App.sysKey(n)), cYear = common((n) => P.founded(n)), cCol = common((n) => n.color);
     const rk = P.ranking({}), pos = new Map(rk.map((s) => [s.n.id, s]));
     const ovList = App.S.nations.filter((k) => !ids.has(k.id) && !ns.some((n) => subjectOf(k, n.id)))
       .sort((a, b) => (pos.get(b.id)?.power ?? -1) - (pos.get(a.id)?.power ?? -1))
-      .map((k) => { const s = pos.get(k.id); return opt(k.id, (s ? '第' + s.place + '名 · ' : '') + (k.name || '（未命名）')); }).join('');
-    const fiefOpts = Object.entries(App.FIEF_SYS).map(([k, s]) => `<optgroup label="${esc(s.name)}">${s.tiers.map((t) => opt(k + ':' + t.id, t.name + '（' + t.ruler + '）')).join('')}</optgroup>`).join('');
-    const sysOpts = Object.entries(App.ADMIN_SYS).map(([k, s]) => opt(k, s.name)).join('');
+      .map((k) => { const s = pos.get(k.id); return opt(k.id, (s ? '第' + s.place + '名 · ' : '') + (k.name || '（未命名）'), cOv); }).join('');
+    const sysOpts = Object.entries(App.ADMIN_SYS).map(([k, s]) => opt(k, s.name, cSys)).join('');
+    const ovName = cOv && cOv !== '0' ? App.nation(+cOv)?.name : null;
     return `<div class="card multi"><h4>已选 ${ns.length} 个国家 <small>Shift / Ctrl + 点击地图或列表可加减</small></h4>
-      <div class="mchips">${ns.map((n) => `<span class="chip" style="--c:${n.color}"><i></i>${esc(n.name) || '（未命名）'}<b data-munsel="${n.id}" title="移出">×</b></span>`).join('')}</div>
+      <div class="mchips">${ns.map((n) => `<span class="chip" style="--c:${n.color}"><i></i>${esc(n.name) || '（未命名）'}<small>${esc(P.title(n).name)}${n.overlord ? '·附庸' : ''}</small><b data-munsel="${n.id}" title="移出">×</b></span>`).join('')}</div>
       <div class="row wrap"><button class="btn small" data-mall>全选</button><button class="btn small" data-mclear>清空选择</button></div>
-      <div class="field"><label>设为附庸 / 封国 → 宗主国</label><select data-mset="overlord">${KEEP}<option value="0">— 全部独立 —</option>${ovList}</select></div>
-      <div class="field"><label>附庸身份（对宗主的封号，如诸侯侯国、汉诸侯王国）</label><select data-mset="fief">${KEEP}${UI.vassalOpts('')}</select></div>
-      <div class="field"><label>国体 / 爵位</label><select data-mset="rank">${KEEP}<optgroup label="中国诸侯国（周制）">${App.FIEF_SYS.zhou.tiers.map((t) => opt('zhou:' + t.id, '诸侯' + t.name + ' · ' + t.short)).join('')}</optgroup><optgroup label="其他国体">${App.RANKS.filter((r) => r.id !== 'fief').map((r) => opt(r.id, r.name + ' · ' + r.ruler)).join('')}</optgroup></select></div>
-      <div class="field"><label>文明</label><select data-mset="culture">${KEEP}${App.CULTURES.map((c) => opt(c.id, c.name)).join('')}</select></div>
-      <div class="field"><label>行政区划制度</label><select data-mset="adminSys">${KEEP}${sysOpts}</select></div>
-      <div class="row wrap"><label class="inline">建国年份 <input type="number" data-mfounded style="width:80px"></label><button class="btn small" data-mact="founded">应用</button>
-        <label class="inline">颜色 <input type="color" data-mcolor value="${ns[0].color}"></label><button class="btn small" data-mact="color">统一颜色</button></div>
+      <div class="field"><label>宗主国${ovName ? `：<b class="gold">${esc(ovName)}</b>` : cOv === '0' ? '：全部独立' : ''}</label><select data-mset="overlord">${head(cOv)}<option value="0" ${cOv === '0' ? 'selected' : ''}>— 全部独立 —</option>${ovList}</select></div>
+      <div class="field"><label>附庸身份（对宗主的封号，如诸侯侯国、汉诸侯王国）</label><select data-mset="fief">${head(cVas)}${UI.vassalOpts(cVas)}</select></div>
+      <div class="field"><label>国体 / 爵位</label><select data-mset="rank">${head(cRank)}<optgroup label="中国诸侯国（周制）">${App.FIEF_SYS.zhou.tiers.map((t) => opt('zhou:' + t.id, '诸侯' + t.name + ' · ' + t.short, cRank)).join('')}</optgroup><optgroup label="其他国体">${App.RANKS.filter((r) => r.id !== 'fief').map((r) => opt(r.id, r.name + ' · ' + r.ruler, cRank)).join('')}</optgroup>${cRank === 'fief' ? '<option value="fief" selected disabled>历代封国（见附庸身份）</option>' : ''}</select></div>
+      <div class="field"><label>文明</label><select data-mset="culture">${head(cCul)}${App.CULTURES.map((c) => opt(c.id, c.name, cCul)).join('')}</select></div>
+      <div class="field"><label>行政区划制度</label><select data-mset="adminSys">${head(cSys)}${sysOpts}</select></div>
+      <div class="row wrap"><label class="inline">建国年份 <input type="number" data-mfounded style="width:80px" value="${cYear ?? ''}" placeholder="${cYear === undefined ? '各不相同' : ''}"></label><button class="btn small" data-mact="founded">应用</button>
+        <label class="inline">颜色 <input type="color" data-mcolor value="${cCol || ns[0].color}"></label><button class="btn small" data-mact="color">统一颜色</button></div>
       <div class="row wrap">
         <button class="btn small" data-mact="vcol">配色随宗主</button><button class="btn small" data-mact="rename">按国体改名</button><button class="btn small" data-mact="rnd">全部重新命名</button>
         <button class="btn small" data-mact="dyn">生成统治家族</button><button class="btn small" data-mact="city">按地理补充城市</button><button class="btn small" data-mact="army">按国力生成军队</button>
