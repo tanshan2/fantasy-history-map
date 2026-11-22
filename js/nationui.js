@@ -172,12 +172,12 @@
           if (el.dataset.re !== undefined || kind === 'n' || (kind === 'person' && key === 'birth')) done({ pol: kind === 'n' && key === 'color' }); else { App.changed({ ui: true }); UI.refreshTool && UI.refreshTool(); }
         };
       });
-      m.querySelector('[data-nrnd]').onclick = () => { App.pushUndo(); n.name = App.Names.nation(n.culture); P.renameByRank(n); done(); };
+      m.querySelector('[data-nrnd]').onclick = () => { App.pushUndo(); n.name = App.Names.nationFor(n); P.renameByRank(n); done(); };
       m.querySelector('[data-cap]').onchange = (e) => { App.pushUndo(); st.cities.forEach((c) => { if (c.type === 'capital') c.type = 'large'; }); const c = S.cities.find((k) => k.id === +e.target.value); if (c) { c.type = 'capital'; if (fam) fam.home = c.id; } done(); };
       // 行政区
       m.querySelector('[data-sys]').onchange = (e) => { const ns = App.ADMIN_SYS[e.target.value]; if (provs.length && !confirm('切换为「' + ns.name + '」？\n已有行政区会保留地名、改成新的级别名称' + (ns.levels < 3 ? '，并删除第三级' : '') + '。')) { again(); return; } App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.setAdminSys(n, e.target.value); done({ pol: true }); };
       m.querySelectorAll('[data-ptog]').forEach((b) => (b.onclick = () => { UI.profOpen[b.dataset.ptog] = !UI.profOpen[b.dataset.ptog]; again(); }));
-      m.querySelectorAll('[data-prnd]').forEach((b) => (b.onclick = () => { const p = App.province(+b.dataset.prnd); App.pushUndo(); Object.assign(p, App.Names.provFor(n, p.level || 1)); done(); }));
+      m.querySelectorAll('[data-prnd]').forEach((b) => (b.onclick = () => { const p = App.province(+b.dataset.prnd); App.pushUndo(); App.PlaceNames.fitProvince(p); done(); }));
       m.querySelectorAll('[data-pdel]').forEach((b) => (b.onclick = () => { const p = App.province(+b.dataset.pdel); if (kids(p.id).length && !confirm(`删除「${p.name}」及其全部下级？`)) return; App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.deleteProvince(p.id); done({ pol: true }); }));
       m.querySelectorAll('[data-padd]').forEach((b) => (b.onclick = () => { const par = App.province(+b.dataset.padd); App.pushUndo(); const p = App.Ops.addProvince(n.id, null, par ? (par.level || 1) + 1 : 1, par ? par.id : 0); if (par) UI.profOpen[par.id] = true; T().activeNation = n.id; T().activeProv = p.id; UI.toast(`已新增「${p.name}」，点 ✎ 到地图上涂出它的范围`); done(); }));
       m.querySelectorAll('[data-ppaint]').forEach((b) => (b.onclick = () => { m.hidden = true; T().activeNation = n.id; T().activeProv = +b.dataset.ppaint; T().set('prov'); UI.refresh(); UI.refreshTool(); UI.toast('用行政区画笔在地图上涂色，完成后按 I 回到国家档案'); }));
