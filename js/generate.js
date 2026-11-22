@@ -91,7 +91,17 @@
     });
     App.Geo.dirtyPol = true; App.Geo.update();
     S.nations.forEach((n) => App.Ops.autoCities(n.id, r, 0.45));
-    S.nations.forEach((n) => { const cap = S.cities.find((k) => k.type === 'capital' && S.owner[App.Ops.cellAt(k.x, k.y)] === n.id); App.Family.createFamily({ culture: n.culture, nation: n.id, home: cap ? cap.id : 0, color: n.color }, r); });
+    // 国体按国名推断，每国生成统治家族
+    S.nations.forEach((n) => { n.rank = App.Polity.guessRank(n); n.founded = (S.meta.year || 1) - 30 - Math.floor(r() * 300); });
+    // 按面积调整：最大的国家可能称帝；小的西方国家多为公国、侯国、伯国
+    const size = new Map(); for (let c = 0; c < N; c++) if (S.owner[c]) size.set(S.owner[c], (size.get(S.owner[c]) || 0) + 1);
+    const bySize = S.nations.slice().sort((a, b) => (size.get(b.id) || 0) - (size.get(a.id) || 0)), med = size.get(bySize[bySize.length >> 1]?.id) || 0;
+    bySize.forEach((n, i) => {
+      const k = size.get(n.id) || 0, latin = App.Names.groups.latin.includes(n.culture);
+      if (i === 0 && k > med * 1.8 && n.rank !== 'empire' && r() < 0.7) { n.rank = n.culture === 'steppe' ? 'khanate' : 'empire'; App.Polity.renameByRank(n); }
+      else if (latin && i >= bySize.length * 0.55 && ['kingdom', 'republic'].includes(n.rank)) { n.rank = ['county', 'duchy', 'marquisate', 'county', 'margraviate'][Math.floor(r() * 5)]; App.Polity.renameByRank(n); }
+    });
+    App.Polity.ensureAllDynasties(r);
   };
 
   // ===== 随机大陆：大陆、半岛、海湾、海岛、群岛、山脉、河流、气候 =====
