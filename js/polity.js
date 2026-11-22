@@ -35,20 +35,21 @@
   // same：同姓宗室（与宗主同一家族姓氏）；pre：家族名前缀，如「齐王刘氏」；suf：按国体改名时的后缀
   const T = (id, name, ruler, house, extra = {}) => ({ id, name, ruler, house, heir: '世子', consort: '夫人', suf: '国', ...extra });
   App.FIEF_SYS = {
-    zhou: { name: '西周·五等爵分封', note: '周天子分封同姓与功臣为诸侯，爵分公、侯、伯、子、男五等。诸侯世袭，须朝觐纳贡、出兵勤王。', tiers: [
-      T('gong', '公国', '公', '公室', { pre: '公' }), T('hou', '侯国', '侯', '公室', { pre: '侯' }), T('bo', '伯国', '伯', '公室', { pre: '伯' }),
-      T('zi', '子国', '子', '公室', { pre: '子' }), T('nan', '男国', '男', '公室', { pre: '男' })] },
+    zhou: { name: '周·诸侯国（王、公、侯、伯、子、男）', note: '周天子分封同姓与功臣为诸侯，爵分公、侯、伯、子、男五等，诸侯世袭，须朝觐纳贡、出兵勤王。春秋以后王室衰微，诸侯各自为政，战国时大国纷纷称王。宗主可选周天子，也可独立。', tiers: [
+      T('wang', '王国（称王诸侯）', '王', '王室', { pre: '王', short: '王', heir: '太子', consort: '王后' }),
+      T('gong', '公国', '公', '公室', { pre: '公', short: '公', heir: '太子', consort: '夫人' }), T('hou', '侯国', '侯', '公室', { pre: '侯', short: '侯', heir: '太子', consort: '夫人' }),
+      T('bo', '伯国', '伯', '公室', { pre: '伯', short: '伯' }), T('zi', '子国', '子', '公室', { pre: '子', short: '子' }), T('nan', '男国', '男', '公室', { pre: '男', short: '男' })] },
     han: { name: '汉·郡国并行', note: '汉初在郡县之外分封同姓诸侯王（王国）与功臣列侯（侯国）。七国之乱后，诸侯王不得治民，由朝廷派相治理。', tiers: [
-      T('wang', '诸侯王国', '诸侯王', '宗室', { same: true, pre: '王', heir: '王太子', consort: '王后' }), T('liehou', '列侯国', '列侯', '列侯家族', { pre: '侯' })] },
+      T('wang', '诸侯王国', '诸侯王', '宗室', { same: true, pre: '王', short: '王', heir: '王太子', consort: '王后' }), T('liehou', '列侯国', '列侯', '列侯家族', { pre: '侯', short: '侯' })] },
     jin: { name: '西晋·宗王出镇', note: '晋武帝大封宗室为王，按户数分大国（二万户）、次国（一万户）、小国（五千户），可自置军队，后来酿成八王之乱。', tiers: [
-      T('da', '大国', '王', '宗室', { same: true, pre: '王', heir: '世子', consort: '王妃' }), T('ci', '次国', '王', '宗室', { same: true, pre: '王', consort: '王妃' }),
+      T('da', '大国', '王', '宗室', { same: true, pre: '王', short: '王', heir: '世子', consort: '王妃' }), T('ci', '次国', '王', '宗室', { same: true, pre: '王', short: '王', consort: '王妃' }),
       T('xiao', '小国', '王', '宗室', { same: true, pre: '王', consort: '王妃' }), T('jungong', '郡公国', '郡公', '勋贵家族', { pre: '公' }), T('xianhou', '县侯国', '县侯', '勋贵家族', { pre: '侯' })] },
     tang: { name: '唐·藩镇与羁縻府州', note: '安史之乱后节度使拥兵自重，河朔三镇父子相承，名为唐臣、实为割据。边疆设羁縻府州，由部族首领世袭都督、刺史。', tiers: [
       T('fanzhen', '藩镇', '节度使', '藩帅家族', { suf: '镇', heir: '留后' }), T('jimi', '羁縻都督府', '都督（世袭）', '部族首领家族', { suf: '都督府' })] },
     yuan: { name: '元·宗王兀鲁思与投下', note: '蒙古以黄金家族宗王分领兀鲁思（封民与封地），功臣贵族另有投下封地，各自统治其民。', tiers: [
       T('ulus', '宗王兀鲁思', '宗王', '黄金家族', { same: true, pre: '王', suf: '兀鲁思', consort: '王妃' }), T('touxia', '投下封地', '投下领主', '勋贵家族', { suf: '投下' })] },
     ming: { name: '明·藩王与土司', note: '明太祖分封诸子为亲王，镇守边塞；亲王嫡长子袭亲王，诸子封郡王。西南设土司，由当地首领世袭宣慰使等职。', tiers: [
-      T('qinwang', '亲王藩国', '亲王', '宗室', { same: true, pre: '王', heir: '世子', consort: '王妃' }), T('junwang', '郡王封国', '郡王', '宗室', { same: true, pre: '郡王', consort: '郡王妃' }),
+      T('qinwang', '亲王藩国', '亲王', '宗室', { same: true, pre: '王', short: '王', heir: '世子', consort: '王妃' }), T('junwang', '郡王封国', '郡王', '宗室', { same: true, pre: '郡王', short: '郡王', consort: '郡王妃' }),
       T('tusi', '土司（宣慰司）', '宣慰使', '土司家族', { suf: '宣慰司', heir: '承袭人' })] },
     qing: { name: '清·三藩与外藩札萨克', note: '清初封吴三桂等为藩王镇守南方（三藩）；漠南、漠北蒙古编为札萨克旗，王公世袭、自治其旗。', tiers: [
       T('fanwang', '藩王', '藩王', '藩王家族', { suf: '藩', consort: '王妃' }), T('jasak', '札萨克旗', '札萨克', '蒙古王公', { suf: '旗', heir: '协理台吉' })] },
@@ -75,7 +76,9 @@
     const r = P.rankOf(n);
     if (r.id !== 'fief') return { rank: r, name: r.name, ruler: r.ruler, house: r.house, cat: r.cat, heir: r.heir, consort: r.consort, suf: r.suffix };
     const sys = App.FIEF_SYS[n.fiefSys || 'zhou'] || App.FIEF_SYS.zhou, t = P.fiefTier(n);
-    return { rank: r, name: t.name, sys, tier: t, ruler: t.ruler, house: t.house, cat: t.house === '王室' ? '王室' : '贵族', heir: t.heir, consort: t.consort, suf: t.suf, same: t.same, pre: t.pre };
+    // 诸侯称号：齐侯、秦公、楚王（国名主体 + 爵）
+    const b = Array.from(P.baseName(n)), ruler = t.short && b.length ? (b.length <= 2 ? b.join('') : b[0]) + t.short : t.ruler;
+    return { rank: r, name: t.name, sys, tier: t, ruler, house: t.house, cat: t.house === '王室' ? '王室' : '贵族', heir: t.heir, consort: t.consort, suf: t.suf, same: t.same, pre: t.pre };
   };
   P.founded = (n) => (n.founded != null ? n.founded : (App.S.meta.year || 1) - 40 - Math.floor(U.hash(n.id, 7, 3) * 320));
   P.yearStr = (y) => (y < 0 ? '前' + -y : y) + ' 年';
