@@ -18,7 +18,13 @@
         <div class="field"><label>封号等级</label><select data-pol="fiefTitle">${sys.tiers.map((k) => opt(k.id, t.tier.id, k.name + '（' + k.ruler + '）')).join('')}</select></div>
         <p class="muted">${esc(sys.note)}</p>`;
     } else if (r.note) h += `<p class="muted">${esc(r.note)}</p>`;
-    h += `<div class="field"><label>宗主国${r.id === 'fief' ? '（封国须有宗主）' : '（附庸时选择）'}</label><select data-pol="overlord"><option value="0">— 独立 —</option>${S.nations.filter((k) => k.id !== n.id && !isSub(k.id)).map((k) => opt(k.id, n.overlord || 0, k.name || '（未命名）')).join('')}</select></div>
+    h += `<div class="field"><label>宗主国${r.id === 'fief' ? '（封国须有宗主）' : '（附庸时选择）'}</label><select data-pol="overlord"><option value="0">— 独立 —</option>${(() => {
+      // 按国力从高到低排列，并标出名次
+      const rk = P.ranking({}), pos = new Map(rk.map((s) => [s.n.id, s]));
+      return S.nations.filter((k) => k.id !== n.id && !isSub(k.id))
+        .sort((a, b) => (pos.get(b.id)?.power ?? -1) - (pos.get(a.id)?.power ?? -1))
+        .map((k) => { const s = pos.get(k.id); return opt(k.id, n.overlord || 0, (s ? '第' + s.place + '名 · ' : '') + (k.name || '（未命名）') + (s ? '（国力 ' + s.power.toFixed(0) + '）' : '')); }).join('');
+    })()}</select></div>
       <div class="field"><label>建国年份</label><input type="number" data-pol="founded" value="${P.founded(n)}"></div>
       <div class="row wrap"><button class="btn small" data-pol-act="rename" title="保留国名主体，换成「${esc(t.suf)}」等称号">按国体改名</button></div>`;
     return h;
