@@ -132,7 +132,9 @@
     }
     c.setLineDash([]);
     if (!POL) c.setLineDash([sw(5), sw(3)]);
-    S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.strokeStyle = POL ? U.shade(n.color, st.borderShade) : 'rgba(90,30,20,.6)'; c.lineWidth = sw(POL ? st.borderW : 1.3); c.stroke(p); });
+    // 国界：先一道淡淡的深色衬底，再画本国颜色的深色线——比行政区界清楚，但不抢眼
+    if (POL) S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.strokeStyle = 'rgba(45,22,10,.32)'; c.lineWidth = sw(st.borderW * 2.6); c.stroke(p); });
+    S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.strokeStyle = POL ? U.shade(n.color, st.borderShade - 0.08) : 'rgba(90,30,20,.6)'; c.lineWidth = sw(POL ? st.borderW * 1.35 : 1.3); c.stroke(p); });
     c.setLineDash([]);
     c.restore();
     if (!exp && App.Tools && App.Tools.wetOn) { App.Tools.flushWet(); c.save(); c.imageSmoothingEnabled = false; c.globalAlpha = Math.min(0.85, st.nationA + 0.05); c.drawImage(App.Tools.wet, 0, 0, WW, HH); c.restore(); c.imageSmoothingEnabled = true; }
