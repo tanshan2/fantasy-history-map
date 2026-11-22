@@ -90,7 +90,7 @@
       App.Ops.autoProvinces(n.id, 0, r);
     });
     App.Geo.dirtyPol = true; App.Geo.update();
-    S.nations.forEach((n) => App.Ops.autoCities(n.id, r, 0.45));
+    { const fm = App.Polity.fertMap(); S.nations.forEach((n) => App.Polity.genCities(n.id, r, { fm, density: 0.85 })); }
     // 国体按国名推断，每国生成统治家族
     S.nations.forEach((n) => { n.rank = App.Polity.guessRank(n); n.founded = (S.meta.year || 1) - 30 - Math.floor(r() * 300); });
     // 按面积调整：最大的国家可能称帝；小的西方国家多为公国、侯国、伯国
@@ -102,6 +102,7 @@
       else if (latin && i >= bySize.length * 0.55 && ['kingdom', 'republic'].includes(n.rank)) { n.rank = ['county', 'duchy', 'marquisate', 'county', 'margraviate'][Math.floor(r() * 5)]; App.Polity.renameByRank(n); }
     });
     App.Polity.ensureAllDynasties(r);
+    S.nations.forEach((n) => App.Polity.genArmies(n, {}, r));
   };
 
   // ===== 随机大陆：大陆、半岛、海湾、海岛、群岛、山脉、河流、气候 =====
