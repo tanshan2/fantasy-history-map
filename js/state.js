@@ -8,7 +8,7 @@ App.newState = () => ({
   nations: [], provinces: [], cities: [], armies: [], rivers: [], lines: [], arrows: [], markers: [], texts: [], families: [], people: [],
   meta: {
     name: '未命名地图', labelFont: 'Noto Serif SC', latinFont: 'IM Fell English', style: 'parchment', styleV: 2, zhNames: true, cityStyle: 'icon', year: 1, lv1: true, lv2: true, lv3: false,
-    showIcons: true, showVassal: true, showGrid: true, showProvLabels: true, showCityLabels: true, showArmies: true,
+    showIcons: true, mapMode: 'pol', showVassal: true, showGrid: true, showProvLabels: true, showCityLabels: true, showArmies: true,
     ocean: '#304a66', ref: null,
   },
   nextId: 1,
