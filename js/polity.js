@@ -206,56 +206,95 @@
   P.URBAN = { huaxia: 1.25, persia: 1.15, latin: 1.2, greek: 1.15, arabic: 1.05, tianzhu: 1.1, wa: 0.95, german: 0.9, english: 0.85, slavic: 0.75, norse: 0.6, celtic: 0.55, nanyang: 0.8, steppe: 0.35 };
 
   // ---------- 按地理生成城市 ----------
-  // 数量取决于「可用土地总量」而不是面积；大小取决于城址周围的丰饶度、河流与海岸
+  // 大中小城：先沿河，再平原；规模看周围土地和气候。关隘：山口、峡谷；要塞：山地、丘陵和边境。村镇：随意分布。
+  // 所有城址都在本国陆地内部（离海、离他国至少一两格），港口内缩一格贴着海岸
+  const MOUNT = (t) => t === 5 || t === 6;
   P.genCities = (nid, r = Math.random, opt = {}) => {
     const S = App.S, n = App.nation(nid); if (!n) return [];
     const C = App.CELL, FM = opt.fm || P.fertMap(), { f, rv, bl } = FM;
     if (opt.replace) S.cities = S.cities.filter((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); return !(c >= 0 && S.owner[c] === nid); });
-    const cells = []; let mass = 0, sx = 0, sy = 0;
-    for (let c = 0; c < N; c++) if (S.owner[c] === nid && S.terrain[c] >= 2) { cells.push(c); mass += f[c]; sx += c % W; sy += (c / W) | 0; }
+    const cells = []; let mass = 0, sx = 0, sy = 0, rough = 0;
+    for (let c = 0; c < N; c++) if (S.owner[c] === nid && S.terrain[c] >= 2) { cells.push(c); mass += f[c]; sx += c % W; sy += (c / W) | 0; if (S.terrain[c] === 4 || MOUNT(S.terrain[c])) rough++; }
     if (!cells.length) return [];
     const cx = sx / cells.length, cy = sy / cells.length, avgF = mass / cells.length;
     const rk = P.rankOf(n).id, urban = (P.URBAN[n.culture] ?? 1) * (rk === 'tribe' ? 0.45 : rk === 'merchant' ? 1.4 : rk === 'khanate' ? 0.7 : 1) * (opt.density ?? 1);
-    // 目标数量：随良田总量增长（边际递减）；至少 1 座（都城）
     const target = Math.max(1, Math.round(Math.pow(mass / 120, 0.75) * urban));
-    const have = S.cities.filter((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); return c >= 0 && S.owner[c] === nid; });
-    const placed = have.map((ct) => [ct.x, ct.y]);
-    const minD = 20 + 14 / Math.max(0.4, avgF + 0.3); // 贫瘠地区城市更稀疏
-    const far = (x, y, d) => placed.every((p) => Math.hypot(p[0] - x, p[1] - y) >= d) && S.cities.every((k) => Math.hypot(k.x - x, k.y - y) >= 16);
-    const site = (c) => bl[c] * 0.7 + f[c] * 0.3 + (rv[c] ? 0.18 : 0) + (isCoast(S, c) ? 0.1 : 0);
-    // 候选：按城址分数加权抽样
-    const cand = []; const step = Math.max(1, Math.floor(cells.length / 4000));
-    for (let i = 0; i < cells.length; i += step) { const c = cells[i]; const s = site(c); if (s > 0.04) cand.push([c, s]); }
-    if (!cand.length) cand.push([cells[Math.floor(cells.length / 2)], 0.05]);
-    const out = [];
-    const add = (c, type) => {
-      const x = ((c % W) + 0.5) * C, y = (((c / W) | 0) + 0.5) * C, ct = { id: App.nid(), x, y, type, name: App.Names.city(n.culture, r) };
-      S.cities.push(ct); placed.push([x, y]); out.push(ct); return ct;
+    // 半径 R 内全是本国陆地（allowSea 时海也可以）
+    const ok = (c, R, allowSea) => {
+      const x = c % W, y = (c / W) | 0;
+      for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+        if (dx * dx + dy * dy > R * R + 1) continue;
+        const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) return false;
+        const k = yy * W + xx, t = S.terrain[k];
+        if (t < 2) { if (!(allowSea && t === 0)) return false; } else if (S.owner[k] !== nid) return false;
+      }
+      return true;
     };
-    // 都城：在丰饶且靠近国土中心的地方
+    const seaNear = (c, R) => { const x = c % W, y = (c / W) | 0; for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H && S.terrain[yy * W + xx] === 0) return true; } return false; };
+    const otherNear = (c, R) => { const x = c % W, y = (c / W) | 0; for (let dy = -R; dy <= R; dy += 2) for (let dx = -R; dx <= R; dx += 2) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H) { const k = yy * W + xx; if (S.terrain[k] >= 2 && S.owner[k] && S.owner[k] !== nid) return true; } } return false; };
+    const mountCount = (c, R) => { const x = c % W, y = (c / W) | 0; let k = 0; for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H && MOUNT(S.terrain[yy * W + xx])) k++; } return k; };
+    // 山口：自身可通行，两侧（左右或上下）都是山
+    const gap = (c) => {
+      const x = c % W, y = (c / W) | 0, m = (xx, yy) => xx >= 0 && yy >= 0 && xx < W && yy < H && MOUNT(S.terrain[yy * W + xx]);
+      const side = (dx, dy) => { for (let i = 1; i <= 4; i++) if (m(x + dx * i, y + dy * i)) return true; return false; };
+      return (side(-1, 0) && side(1, 0)) || (side(0, -1) && side(0, 1));
+    };
+    // 本国内部（离边界、海岸足够远）的格子；小国放宽
+    const sample = []; const step = Math.max(1, Math.floor(cells.length / 5000));
+    for (let i = 0; i < cells.length; i += step) sample.push(cells[i]);
+    let RIN = 2, inner = sample.filter((c) => ok(c, 2, false));
+    if (inner.length < 3) { RIN = 1; inner = sample.filter((c) => ok(c, 1, false)); }
+    if (!inner.length) { RIN = 0; inner = sample.slice(); }
+    const have = S.cities.filter((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); return c >= 0 && S.owner[c] === nid; });
+    const placed = []; const out = [];
+    const xy = (c) => [((c % W) + 0.5) * C, (((c / W) | 0) + 0.5) * C];
+    const free = (c, d) => { const [x, y] = xy(c); return placed.every((p) => Math.hypot(p[0] - x, p[1] - y) >= d) && S.cities.every((k) => Math.hypot(k.x - x, k.y - y) >= Math.min(d, 16)); };
+    const add = (c, type) => { const [x, y] = xy(c), ct = { id: App.nid(), x, y, type, name: App.Names.city(n.culture, r) }; S.cities.push(ct); placed.push([x, y]); out.push(ct); return ct; };
+    const pickW = (arr, w) => { const tot = arr.reduce((a, k) => a + w(k), 0); let t = r() * tot; for (const k of arr) { t -= w(k); if (t <= 0) return k; } return arr[arr.length - 1]; };
+    // 城址分数：沿河最优先，其次平原，再看周围丰饶度
+    const T = (c) => S.terrain[c];
+    const score = (c) => (rv[c] ? 0.65 : 0) + (T(c) === 2 ? 0.28 : T(c) === 3 ? 0.1 : T(c) === 4 ? 0.04 : 0) + bl[c] * 0.5 + f[c] * 0.15;
+    const sizeScore = (c) => bl[c] * 0.7 + f[c] * 0.3 + (rv[c] ? 0.15 : 0);
+    const mainCand = inner.filter((c) => !MOUNT(T(c)) && T(c) !== 9 && f[c] > 0.03).map((c) => [c, score(c)]);
+    if (!mainCand.length) inner.forEach((c) => mainCand.push([c, 0.05]));
+    // 港口候选：内缩一格、两格内有海
+    const portCand = sample.filter((c) => ok(c, 1, false) && ok(c, 2, true) && seaNear(c, 2) && !MOUNT(T(c)) && f[c] > 0.05);
+    const minD = 20 + 14 / Math.max(0.4, avgF + 0.3);
+    // 1) 都城：丰饶、近河、靠近国土中心
     if (!have.some((k) => k.type === 'capital')) {
-      let best = cand[0][0], bs = -1;
-      cand.forEach(([c, s]) => { const d = Math.hypot((c % W) - cx, ((c / W) | 0) - cy) / Math.sqrt(cells.length); const v = s * (1.15 - Math.min(0.8, d)); if (v > bs) { bs = v; best = c; } });
+      let best = mainCand[0][0], bs = -1;
+      mainCand.forEach(([c, s]) => { const d = Math.hypot((c % W) - cx, ((c / W) | 0) - cy) / Math.sqrt(cells.length); const v = s * (1.15 - Math.min(0.8, d)); if (v > bs) { bs = v; best = c; } });
       add(best, 'capital');
     }
-    // 其余城市：先选城址，再按城址在本国的排名和绝对丰饶度定大小
-    const need = target - have.length - out.length; let tries = 0; const sites = [];
-    const tot = cand.reduce((a, k) => a + k[1] * k[1], 0);
-    while (sites.length < need && tries++ < need * 60 + 200) {
-      let t = r() * tot, c = cand[0][0]; for (const k of cand) { t -= k[1] * k[1]; if (t <= 0) { c = k[0]; break; } }
-      const x = ((c % W) + 0.5) * C, y = (((c / W) | 0) + 0.5) * C; if (!far(x, y, minD)) continue;
-      placed.push([x, y]); sites.push([c, site(c) + (r() - 0.5) * 0.12]);
+    // 2) 大中小城
+    const need = target - have.length - out.length, sites = []; let tries = 0;
+    while (sites.length < need && tries++ < need * 50 + 150) {
+      const [c] = pickW(mainCand, (k) => k[1] * k[1]); if (!free(c, minD)) continue;
+      placed.push(xy(c)); sites.push([c, sizeScore(c) + (r() - 0.5) * 0.1]);
     }
     placed.length -= sites.length;
     sites.sort((a, b) => b[1] - a[1]);
     sites.forEach(([c, s], i) => {
-      const p = sites.length > 1 ? i / (sites.length - 1) : 0.5, ter = S.terrain[c], coast = isCoast(S, c);
-      // 大城：本国前 10% 且土地真正富庶；贫瘠国家即使排第一也只是中小城
-      let type = p < 0.1 && s > 0.62 ? 'large' : p < 0.38 && s > 0.38 ? 'medium' : s > 0.16 && p < 0.8 ? 'small' : 'village';
-      if (coast && type !== 'village' && r() < 0.5) type = type === 'large' && r() < 0.6 ? 'large' : 'port';
-      else if ((ter === 5 || ter === 4) && type !== 'large' && r() < 0.35) type = r() < 0.5 ? 'fortress' : 'pass';
-      add(c, type);
+      const p = sites.length > 1 ? i / (sites.length - 1) : 0.5;
+      add(c, p < 0.1 && s > 0.62 ? 'large' : p < 0.38 && s > 0.38 ? 'medium' : 'small');
     });
+    // 3) 港口：沿海国家按海岸长度设 1～若干个
+    if (portCand.length) {
+      const k = Math.min(6, Math.max(1, Math.round(Math.sqrt(portCand.length / 30) * urban)));
+      for (let i = 0, t = 0; i < k && t < 200; t++) { const c = pickW(portCand, (q) => 0.05 + f[q] + (rv[q] ? 0.6 : 0)); if (!free(c, minD * 0.8)) continue; add(c, f[c] > 0.5 && r() < 0.25 ? 'large' : 'port'); i++; }
+    }
+    // 4) 关隘：山口、峡谷（两侧是山的通道）
+    const passCand = inner.filter((c) => !MOUNT(T(c)) && gap(c));
+    const nPass = Math.min(4, Math.round(passCand.length / 60 + (passCand.length ? 0.6 : 0)));
+    for (let i = 0, t = 0; i < nPass && t < 150; t++) { const c = pickW(passCand, (q) => 1 + mountCount(q, 3) + (otherNear(q, 10) ? 8 : 0)); if (!free(c, 18)) continue; add(c, 'pass'); i++; }
+    // 5) 要塞：山地、丘陵，优先靠近边境
+    const fortCand = inner.filter((c) => (T(c) === 4 || T(c) === 5) && ok(c, 1, false));
+    const nFort = Math.min(4, Math.round(rough / 900 + (fortCand.length ? 0.5 : 0)));
+    for (let i = 0, t = 0; i < nFort && t < 150; t++) { const c = pickW(fortCand, (q) => 1 + (otherNear(q, 9) ? 10 : 0) + (T(q) === 5 ? 1 : 0)); if (!free(c, 18)) continue; add(c, 'fortress'); i++; }
+    // 6) 村镇：随意撒在可住人的地方
+    const villCand = inner.filter((c) => T(c) !== 6 && f[c] > 0.02);
+    const nVill = Math.round(target * 0.5 * (rk === 'tribe' ? 1.5 : 1));
+    for (let i = 0, t = 0; i < nVill && villCand.length && t < nVill * 30; t++) { const c = villCand[Math.floor(r() * villCand.length)]; if (!free(c, 14)) continue; add(c, 'village'); i++; }
     return out;
   };
 
@@ -280,11 +319,19 @@
   const fmtTroops = (t) => (t >= 1e4 ? (Math.round(t / 5e3) / 2) + '万' : String(Math.max(500, Math.round(t / 100) * 100)));
   const nationCities = (n) => App.S.cities.filter((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); return c >= 0 && App.S.owner[c] === n.id; });
   const ORD2 = ['capital', 'large', 'port', 'fortress', 'medium', 'pass', 'small', 'village'];
+  // 部队放在城旁，但必须落在本国陆地上（不进海、不进他国）
+  P.safeSpot = (nid, x, y, i = 0) => {
+    const S = App.S, own = (px, py) => { const c = App.Ops.cellAt(px, py); return c >= 0 && S.terrain[c] >= 2 && S.owner[c] === nid; };
+    const okAll = (px, py) => own(px, py) && own(px - 8, py) && own(px + 8, py) && own(px, py - 8) && own(px, py + 8);
+    for (let k = 0; k < 16; k++) { const a = i * 2.4 + k * 0.785, d = 22 - (k >> 3) * 8; const px = x + Math.cos(a) * d, py = y + 14 + Math.sin(a) * d * 0.6; if (okAll(px, py)) return [px, py]; }
+    for (let k = 0; k < 16; k++) { const a = k * 0.785, d = 10 + (k >> 3) * 8; const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d; if (own(px, py)) return [px, py]; }
+    return [x, y];
+  };
   P.armySpot = (n, i) => {
     const cs = nationCities(n).sort((a, b) => ORD2.indexOf(a.type) - ORD2.indexOf(b.type));
     const ang = i * 2.4;
-    if (cs.length) { const c = cs[i % cs.length]; return [c.x + Math.cos(ang) * 22, c.y + 18 + Math.sin(ang) * 10]; }
-    const L = App.Geo.labels && App.Geo.labels.get(n.id); return L ? [L.x + Math.cos(ang) * 30, L.y + 30 + Math.sin(ang) * 20] : [App.WW / 2, App.HH / 2];
+    if (cs.length) { const c = cs[i % cs.length]; return P.safeSpot(n.id, c.x, c.y, i); }
+    const L = App.Geo.labels && App.Geo.labels.get(n.id); return L ? P.safeSpot(n.id, L.x, L.y, i) : [App.WW / 2, App.HH / 2];
   };
   P.genArmies = (n, opt = {}, r = Math.random) => {
     const S = App.S, st = P.allStats().get(n.id); if (!st || !st.cells) return [];
@@ -308,7 +355,7 @@
       if (i === k - 1 && hasPort && k >= 2 && r() < 0.8) { type = 'navy'; near = hasPort; }
       const cname = near ? near.name.replace(/(城|港|京|堡)$/, '') : P.baseName(n);
       const name = type === 'guard' ? (n.culture === 'steppe' ? '牙帐亲军' : n.culture === 'wa' ? '旗本' : zh ? '禁军' : '近卫军') : type === 'navy' ? cname + (zh ? '水师' : '舰队') : n.culture === 'steppe' ? ['左翼', '右翼', '中军', '前锋', '后军'][i % 5] : n.culture === 'latin' ? cname + '军团' : cname + '军';
-      const [x, y] = near ? [near.x + Math.cos((base0 + i) * 2.4) * 22, near.y + 18 + Math.sin((base0 + i) * 2.4) * 10] : P.armySpot(n, base0 + i);
+      const [x, y] = near ? P.safeSpot(n.id, near.x, near.y, base0 + i) : P.armySpot(n, base0 + i);
       const a = { id: App.nid(), x, y, nation: n.id, type, strength: fmtTroops((total * shares[i]) / ss), name };
       S.armies.push(a); out.push(a);
     }
