@@ -5,7 +5,7 @@
   const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
   const opt = (v, cur, label) => `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(label)}</option>`;
   const cultName = (id) => App.CULTURES.find((c) => c.id === id)?.name || '';
-  const CT = { capital: '首都', large: '大城', medium: '中城', small: '小城', town: '村镇', fortress: '要塞', port: '港口', pass: '关隘' };
+  const CT = { capital: '首都', large: '大城', medium: '中城', small: '小城', village: '村镇', fortress: '要塞', port: '港口', pass: '关隘' };
 
   // ---------- 国体 / 分封 / 宗主 选择控件（国家页与档案共用） ----------
   UI.polityFields = (n) => {
@@ -43,74 +43,105 @@
   // ---------- 国力排名 ----------
   UI.rankOpt = UI.rankOpt || { sort: 'power', vassals: true };
   UI.powerDialog = () => {
-    const o = UI.rankOpt, list = P.ranking(o);
+    const o = UI.rankOpt, list = P.ranking(o), w = P.WEIGHTS;
     const bar = (v, col) => `<div class="pbar"><i style="width:${Math.max(2, v).toFixed(1)}%;background:${col}"></i></div>`;
     const rows = list.map((s) => {
-      const n = s.n, t = P.title(n), ov = P.overlord(n);
+      const n = s.n, t = P.title(n), ov = P.overlord(n), q = s.area ? Math.round((s.good / s.area) * 100) : 0;
       return `<tr data-prof="${n.id}"><td class="pl">${s.place <= 3 ? ['🥇', '🥈', '🥉'][s.place - 1] : s.place}</td>
         <td><i class="sw" style="background:${n.color}"></i><b>${esc(n.name) || '（未命名）'}</b>${ov ? `<small>　${esc(ov.name)}之${esc(t.name)}</small>` : ''}</td>
-        <td>${esc(t.name)}</td><td>${P.areaStr(s.area)}${o.vassals && s.eArea > s.area + 1 ? '<small>（含附庸）</small>' : ''}</td><td>${s.troops ? P.troopStr(s.troops) : '—'}</td>
+        <td>${esc(t.name)}</td><td>${P.areaStr(s.area)}</td><td>${P.areaStr(s.good)}<small>（${q}%）</small></td>
+        <td>${s.cities.length} 座<small>（${s.cityPts.toFixed(0)} 分）</small></td><td>${s.troops ? P.troopStr(s.troops) : '—'}</td>
         <td class="pw">${bar(s.power, n.color)}<b>${s.power.toFixed(1)}</b></td></tr>`;
     }).join('');
     UI.modal(`<h3>国力排名</h3>
-      <div class="row wrap">排序：${[['power', '综合国力'], ['area', '领土'], ['mil', '军力']].map(([k, l]) => `<button class="chip ${o.sort === k ? 'on' : ''}" data-sort="${k}">${l}</button>`).join('')}
+      <div class="row wrap">排序：${[['power', '综合国力'], ['good', '有效领土'], ['area', '总面积'], ['city', '城市'], ['mil', '军力']].map(([k, l]) => `<button class="chip ${o.sort === k ? 'on' : ''}" data-sort="${k}">${l}</button>`).join('')}
         <label class="inline" style="margin-left:12px"><input type="checkbox" data-vas ${o.vassals ? 'checked' : ''}> 附庸按一半计入宗主</label></div>
-      <p class="muted">综合国力 ＝ 领土 65% ＋ 军力 35%（都以第一名为 100 换算）。军力按兵力 × 兵种系数计算：重骑兵 1.8、战象 2.2、禁军 1.5、骑兵 1.4、民兵 0.5 等；没填兵力的部队按 5000 人算。</p>
-      ${list.length ? `<div class="ptable"><table><thead><tr><th>名次</th><th>国家</th><th>国体</th><th>领土</th><th>兵力</th><th>国力</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">点一行查看该国档案。</p>` : '<p class="muted">还没有拥有领土的国家。</p>'}
-      <div class="row end"><button class="btn" data-dyn-all>为所有国家生成统治家族</button><button class="btn pri" data-close>关闭</button></div>`, (m) => {
+      <p class="muted">综合国力 ＝ 有效领土 ${w.good * 100}% ＋ 城市 ${w.city * 100}% ＋ 军力 ${w.mil * 100}%（各项以第一名为 100 换算）。<br>
+      有效领土＝每块土地按「地貌 × 气候 × 森林」折算：平原 1、丘陵 0.6、草原 0.55、山地 0.18、沙漠 0.05；温带季风、亚热带湿润 1，沙漠气候 0.08，苔原 0.05；沿河 ×1.4、沿海 ×1.1。括号里是良田率。<br>
+      城市按规模计分：首都 10、大城 6、港口 4、中城 3、要塞 2、小城 1.5、关隘 1.2、村镇 0.6。军力＝兵力 × 兵种系数（重骑兵 1.8、战象 2.2、禁军 1.5、骑兵 1.4、民兵 0.5…）。</p>
+      ${list.length ? `<div class="ptable"><table><thead><tr><th>名次</th><th>国家</th><th>国体</th><th>总面积</th><th>有效领土</th><th>城市</th><th>兵力</th><th>国力</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">点一行打开该国档案（可直接修改）。</p>` : '<p class="muted">还没有拥有领土的国家。</p>'}
+      <div class="row end"><button class="btn" data-dyn-all>为所有国家生成统治家族</button><button class="btn" data-army-all>为没有军队的国家生成军队</button><button class="btn pri" data-close>关闭</button></div>`, (m) => {
       m.querySelector('.dlg').classList.add('wide');
       m.querySelectorAll('[data-sort]').forEach((b) => (b.onclick = () => { o.sort = b.dataset.sort; UI.powerDialog(); }));
       const v = m.querySelector('[data-vas]'); if (v) v.onchange = () => { o.vassals = v.checked; UI.powerDialog(); };
       m.querySelectorAll('[data-prof]').forEach((tr) => (tr.onclick = () => UI.profile(+tr.dataset.prof)));
       m.querySelector('[data-dyn-all]').onclick = () => { App.pushUndo(); const k = P.ensureAllDynasties(); App.changed({ ui: true }); UI.toast(k ? `已为 ${k} 个国家生成统治家族` : '所有国家都已有统治家族'); UI.powerDialog(); };
+      m.querySelector('[data-army-all]').onclick = () => { App.pushUndo(); let k = 0; App.S.nations.forEach((n) => { if (!App.S.armies.some((a) => a.nation === n.id) && P.genArmies(n).length) k++; }); App.changed({ ui: true }); UI.toast(k ? `已为 ${k} 个国家生成军队` : '所有国家都已有军队'); UI.powerDialog(); };
     });
   };
 
-  // ---------- 国家档案（背景板） ----------
-  UI.profile = (nid) => {
+  // ---------- 国家档案（背景板，全部可编辑） ----------
+  UI.profOpen = UI.profOpen || {};
+  const armyOpts = (cur) => ['步兵', '骑兵', '其他'].map((g) => `<optgroup label="${g}">${App.ARMY_TYPES.filter((a) => a.g === g).map((a) => opt(a.id, cur, a.name)).join('')}</optgroup>`).join('');
+  const cityOpts = (cur) => App.CITY_TYPES.map((c) => opt(c.id, cur, c.name)).join('');
+  const ORDC = ["capital", "large", "port", "medium", "fortress", "pass", "small", "village"];
+  const lvCn = ['', '一', '二', '三'];
+  UI.profile = (nid, keepScroll) => {
     const n = App.nation(nid); if (!n) { UI.toast('先选择一个国家（点地图上的领土或列表）'); return; }
-    const all = P.ranking({ sort: 'power', vassals: true }), st = all.find((s) => s.n.id === n.id) || P.allStats().get(n.id);
-    const t = P.title(n), ov = P.overlord(n), vas = P.vassals(n), fam = P.dynasty(n), F = App.Family, yr = App.S.meta.year || 1;
-    const pa = fam && F.get(fam.patriarch), heir = fam && App.S.people.find((q) => q.family === fam.id && q.position === t.heir && !q.death);
+    const S = App.S, all = P.ranking({ sort: 'power', vassals: true }), st = all.find((s) => s.n.id === n.id) || P.allStats().get(n.id);
+    const t = P.title(n), ov = P.overlord(n), vas = P.vassals(n), fam = P.dynasty(n), F = App.Family, yr = S.meta.year || 1;
+    const pa = fam && F.get(fam.patriarch), sp = pa && F.get(pa.spouse);
+    const heir = fam && S.people.find((q) => q.family === fam.id && q.position === t.heir && !q.death);
     const cap = P.capital(n, st), comps = App.Geo.nationComps(n.id), sys = App.sysOf(n);
-    const l1 = App.S.provinces.filter((p) => p.nation === n.id && (p.level || 1) === 1);
-    const cityCount = {}; st.cities.forEach((c) => (cityCount[c.type] = (cityCount[c.type] || 0) + 1));
+    const provs = S.provinces.filter((p) => p.nation === n.id), kids = (id) => provs.filter((p) => p.parent === id);
+    const l1 = provs.filter((p) => (p.level || 1) === 1);
     const age = (p) => (p.death || yr) - p.birth;
-    const lore = n.lore != null ? n.lore : '';
-    const fams = App.S.families.filter((f) => f.nation === n.id);
+    const fams = S.families.filter((f) => f.nation === n.id);
+    const q = st.area ? Math.round((st.good / st.area) * 100) : 0;
+    const terr = Object.entries(st.terr || {}).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => (App.TERRAINS.find((x) => x.id === +k)?.name || k) + ' ' + Math.round((v / st.area) * 100) + '%').join('、');
+    const E = (kind, id, key, v, type = 'text', extra = '') => `<input type="${type}" data-e="${kind}:${id}:${key}" value="${esc(v ?? '')}" ${extra}>`;
+    const provRow = (p) => {
+      const ks = kids(p.id), open = UI.profOpen[p.id];
+      return `<div class="erow lv${p.level || 1}">${ks.length ? `<button class="x tog" data-ptog="${p.id}">${open ? '▾' : '▸'}</button>` : '<span class="x"></span>'}
+        ${E('prov', p.id, 'name', p.name)}<small>${ks.length ? ks.length + ' 个' + esc(App.levelName(n, (p.level || 1) + 1)) : ''}</small>
+        <button class="x" data-prnd="${p.id}" title="随机改名">🎲</button>${(p.level || 1) < sys.levels ? `<button class="x" data-padd="${p.id}" title="下设${esc(App.levelName(n, (p.level || 1) + 1))}">＋</button>` : ''}<button class="x" data-ppaint="${p.id}" title="到地图上涂这个区">✎</button><button class="x del" data-pdel="${p.id}" title="删除（含下级）">×</button></div>
+        ${open ? `<div class="esub">${ks.map(provRow).join('')}</div>` : ''}`;
+    };
     const left = `
       <div class="pcard"><h4>基础信息</h4>
-        ${kv('国体', `${esc(t.name)}<small>（${esc(t.cat)}）</small>`)}
-        ${kv('君主称号', esc(t.ruler))}
-        ${kv('文明', esc(cultName(n.culture)))}
-        ${kv('建国', P.yearStr(P.founded(n)) + `<small>（国祚 ${yr - P.founded(n)} 年）</small>`)}
-        ${kv('首都', cap ? esc(cap.name) : '—')}
-        ${kv('国教', fam ? esc(fam.religion) : '—')}
-        ${kv('领土', `${P.areaStr(st.area)}<small>（${st.cells} 格${comps.length > 1 ? ' · ' + (comps.length - 1) + ' 块飞地' : ''}）</small>`)}
-        ${kv('国力', st.power != null ? `第 ${st.place} 名 · ${st.power.toFixed(1)} 分` : '—')}
+        <div class="egrid">
+          <label>国名</label><div class="row">${E('n', n.id, 'name', n.name)}<button class="btn small" data-nrnd title="按文明随机">🎲</button></div>
+          <label>颜色</label><div class="row">${E('n', n.id, 'color', n.color, 'color')}</div>
+          <label>文明</label><select data-e="n:${n.id}:culture">${App.CULTURES.map((c) => opt(c.id, n.culture, c.name)).join('')}</select>
+          <label>首都</label><select data-cap><option value="0">— 无 —</option>${st.cities.map((c) => opt(c.id, cap && cap.type === 'capital' ? cap.id : 0, c.name + '（' + (CT[c.type] || c.type) + '）')).join('')}</select>
+          <label>国教</label>${fam ? E('fam', fam.id, 'religion', fam.religion, 'text', 'list="relListP"') : '<span class="muted">先生成统治家族</span>'}
+        </div>
+        <datalist id="relListP">${App.Names.RELIGIONS.map((r) => `<option>${esc(r)}</option>`).join('')}</datalist>
+        ${kv('总面积', `${P.areaStr(st.area)}<small>（${st.cells} 格${comps.length > 1 ? ' · ' + (comps.length - 1) + ' 块飞地' : ''}）</small>`)}
+        ${kv('有效领土', `${P.areaStr(st.good)}<small>（良田率 ${q}%${st.river ? ' · 沿河 ' + P.areaStr(st.river) : ''}）</small>`)}
+        ${terr ? kv('地貌', `<small>${terr}</small>`) : ''}
+        ${kv('国力', st.power != null ? `第 ${st.place} 名 · ${st.power.toFixed(1)} 分<small>（土地 ${st.gScore.toFixed(0)} · 城市 ${st.cScore.toFixed(0)} · 军力 ${st.mScore.toFixed(0)}）</small>` : '—')}
       </div>
       <div class="pcard"><h4>行政区划</h4>
-        ${kv('制度', esc(sys.name))}
-        ${[1, 2, 3].slice(0, sys.levels).map((lv) => kv(`${lv === 1 ? '一' : lv === 2 ? '二' : '三'}级（${esc(App.levelName(n, lv))}）`, st.prov[lv] + ' 个')).join('')}
-        ${l1.length ? `<div class="tags">${l1.slice(0, 40).map((p) => `<span>${esc(p.name)}</span>`).join('')}${l1.length > 40 ? `<span>…</span>` : ''}</div>` : '<p class="muted">还没有划分行政区（在「国家」页一键划分）。</p>'}
-        ${kv('城市', st.cities.length + ' 座' + (st.cities.length ? '<small>（' + Object.entries(cityCount).map(([k, v]) => (CT[k] || k) + ' ' + v).join('、') + '）</small>' : ''))}
+        <div class="field"><label>制度</label><select data-sys>${UI.sysOptions(n)}</select></div>
+        <p class="muted">${[1, 2, 3].slice(0, sys.levels).map((lv) => `${lvCn[lv]}级${esc(App.levelName(n, lv))} ${st.prov[lv]} 个`).join(' · ')}</p>
+        <div class="elist">${l1.length ? l1.map(provRow).join('') : '<p class="muted">还没有行政区。</p>'}</div>
+        <div class="row wrap"><button class="btn small" data-padd="0">＋ 新增${esc(App.levelName(n, 1))}</button>
+          <label class="inline">分成 <input type="number" min="1" max="40" data-pk style="width:52px" placeholder="自动"> 个</label><button class="btn small" data-pauto>重新划分全部</button><button class="btn small" data-psub>保留${esc(App.levelName(n, 1))}，只细分下级</button></div>
       </div>
-      <div class="pcard"><h4>军队</h4>
-        ${kv('总兵力', st.troops ? P.troopStr(st.troops) : '—')}
-        ${st.troops ? kv('构成', `步兵 ${P.troopStr(st.inf)} · 骑兵 ${P.troopStr(st.cav)} · 其他 ${P.troopStr(st.other)}`) : ''}
-        ${st.armies.length ? `<div class="alist">${st.armies.map((a) => `<div><span>${esc(a.name || '（无名部队）')}</span><span>${esc(App.ARMY_TYPES.find((k) => k.id === a.type)?.name || a.type)} · ${esc(a.strength || '5000')}</span></div>`).join('')}</div>` : '<p class="muted">还没有部队。用左侧「军队」工具（快捷键 J）放置。</p>'}
+      <div class="pcard"><h4>城市 · ${st.cities.length} 座</h4>
+        <div class="elist">${st.cities.slice().sort((a, b) => ORDC.indexOf(a.type) - ORDC.indexOf(b.type)).map((c) => `<div class="erow">${E('city', c.id, 'name', c.name)}<select data-e="city:${c.id}:type" data-re>${cityOpts(c.type)}</select><button class="x" data-cgo="${c.id}" title="在地图上定位">⌖</button><button class="x del" data-cdel="${c.id}">×</button></div>`).join('') || '<p class="muted">还没有城市。</p>'}</div>
+        <div class="row wrap"><button class="btn small" data-cgen="add">按地理补充城市</button><button class="btn small" data-cgen="replace">重新生成本国城市</button></div>
+        <p class="muted">城市数量看可用土地（平原、河谷、沿海多；沙漠、山地、冻土少），大小看城址周围的丰饶度。游牧、部落国家城市少。</p>
       </div>`;
     const right = `
       <div class="pcard"><h4>统治家族 · ${esc(t.house || t.cat)}</h4>
-        ${fam ? `${kv('家族', `<a data-fam="${fam.id}">${esc(fam.name)}</a>`)}${kv('家族建立', P.yearStr(fam.founded))}
-          ${kv('在位君主', pa ? `${esc(t.ruler)} ${esc(pa.name)}<small>（${age(pa)} 岁）</small>` : '—')}
-          ${kv('配偶', pa && F.get(pa.spouse) ? esc(F.get(pa.spouse).name) : '—')}
-          ${kv('继承人', heir ? `${esc(heir.name)}<small>（${esc(t.heir)} · ${age(heir)} 岁）</small>` : '未定')}
-          ${kv('家族成员', App.S.people.filter((q) => q.family === fam.id).length + ' 人')}`
-          : '<p class="muted">还没有统治家族。</p>'}
+        ${fam ? `<div class="egrid">
+          <label>家族</label><div class="row">${E('fam', fam.id, 'name', fam.name)}<button class="btn small" data-fam-open>族谱</button></div>
+          <label>${esc(t.ruler)}</label><div class="row">${pa ? E('person', pa.id, 'name', pa.name) + E('person', pa.id, 'birth', pa.birth, 'number', 'title="出生年" style="width:76px;flex:none"') + `<small>${age(pa)}岁</small>` : '—'}</div>
+          <label>${esc(t.consort)}</label><div class="row">${sp ? E('person', sp.id, 'name', sp.name) : '—'}</div>
+          <label>${esc(t.heir)}</label><select data-heir><option value="0">— 未定 —</option>${S.people.filter((q2) => q2.family === fam.id && !q2.death && (!pa || q2.id !== pa.id) && !q2.inlaw).map((q2) => opt(q2.id, heir ? heir.id : 0, q2.name + '（' + age(q2) + '岁）')).join('')}</select>
+          <label>家族建立</label>${E('fam', fam.id, 'founded', fam.founded, 'number')}
+        </div>` : '<p class="muted">还没有统治家族。</p>'}
         <div class="row wrap">
           ${fams.length > 1 || (fams.length && !fam) ? `<select data-pick-dyn><option value="0">— 指定本国已有家族 —</option>${fams.map((f) => opt(f.id, fam ? fam.id : 0, f.name)).join('')}</select>` : ''}
-          <button class="btn small pri" data-dyn>${fam ? '重新生成统治家族' : '生成统治家族'}</button>${fam ? '<button class="btn small" data-fam-open>打开族谱</button>' : ''}</div>
+          <button class="btn small pri" data-dyn>${fam ? '重新生成统治家族' : '生成统治家族'}</button></div>
+      </div>
+      <div class="pcard"><h4>军队 · ${st.troops ? P.troopStr(st.troops) : '无'}</h4>
+        ${st.troops ? `<p class="muted">步兵 ${P.troopStr(st.inf)} · 骑兵 ${P.troopStr(st.cav)} · 其他 ${P.troopStr(st.other)}</p>` : ''}
+        <div class="elist">${st.armies.map((a) => `<div class="erow">${E('army', a.id, 'name', a.name, 'text', 'placeholder="部队名"')}<select data-e="army:${a.id}:type" data-re>${armyOpts(a.type)}</select>${E('army', a.id, 'strength', a.strength, 'text', 'placeholder="兵力" style="width:64px;flex:none"')}<button class="x" data-ago="${a.id}" title="在地图上定位">⌖</button><button class="x del" data-adel="${a.id}">×</button></div>`).join('') || '<p class="muted">还没有部队。</p>'}</div>
+        <div class="row wrap"><button class="btn small" data-aadd>＋ 新建部队</button><button class="btn small" data-agen="add">按国力生成军队</button><button class="btn small" data-agen="replace">重新生成全部军队</button></div>
+        <p class="muted">兵力可写「3万」「8000」「1.5万」。新部队放在首都附近，可在地图上拖动。生成时兵力按有效领土和城市估算，兵种按文明（草原多骑射、天竺有战象、沿海有水军…）。</p>
       </div>
       <div class="pcard"><h4>宗藩关系</h4>
         ${kv('宗主', ov ? `<a data-goto="${ov.id}">${esc(ov.name)}</a>` : '独立')}
@@ -118,25 +149,62 @@
         ${vas.length ? `<div class="row wrap"><button class="btn small" data-vcol>封国配色随宗主</button></div>` : ''}
       </div>
       <div class="pcard"><h4>国体与分封</h4>${UI.polityFields(n)}</div>
-      <div class="pcard"><h4>国家背景</h4><textarea data-lore rows="6" placeholder="建国经过、重大事件、国策……">${esc(lore)}</textarea>
+      <div class="pcard"><h4>国家背景</h4><textarea data-lore rows="6" placeholder="建国经过、重大事件、国策……">${esc(n.lore || '')}</textarea>
         <div class="row wrap"><button class="btn small" data-lore-gen>🎲 随机生成背景</button></div></div>`;
+    const prevScroll = keepScroll ? document.querySelector('#modal .dlg')?.scrollTop || 0 : 0;
     UI.modal(`<div class="phead" style="--c:${n.color}"><i></i><div><h3>${esc(n.name) || '（未命名）'}</h3><small>${esc(t.name)}${ov ? ' · ' + esc(ov.name) + '之' + (t.rank.id === 'fief' ? '封国' : '附庸') : ''}${pa ? ' · ' + esc(t.ruler) + ' ' + esc(pa.name) : ''}</small></div></div>
       <div class="pgrid"><div>${left}</div><div>${right}</div></div>
       <div class="row end"><button class="btn" data-hl>在地图上高亮</button><button class="btn" data-rank>国力排名</button><button class="btn pri" data-close>关闭</button></div>`, (m) => {
-      m.querySelector('.dlg').classList.add('wide');
-      const again = () => UI.profile(n.id);
+      const dlg = m.querySelector('.dlg'); dlg.classList.add('wide', 'prof'); dlg.scrollTop = prevScroll;
+      const again = () => UI.profile(n.id, true);
+      const done = (what = {}) => { App.changed({ ui: true, ...what }); UI.refreshTool && UI.refreshTool(); again(); };
+      const zoomTo = (x, y) => { m.hidden = true; App.R.zoomToBox([x - 110, y - 80, x + 110, y + 80], 1); };
       UI.bindPolityFields(m, n, again);
-      m.querySelectorAll('[data-goto]').forEach((a) => (a.onclick = () => UI.profile(+a.dataset.goto)));
-      m.querySelectorAll('[data-fam],[data-fam-open]').forEach((a) => (a.onclick = () => { m.hidden = true; App.Family.fid = fam.id; App.Family.show(); }));
+      // 通用字段：data-e="类型:id:字段"
+      const getObj = (kind, id) => kind === 'n' ? n : kind === 'prov' ? App.province(id) : kind === 'city' ? S.cities.find((c) => c.id === id) : kind === 'army' ? S.armies.find((a) => a.id === id) : kind === 'fam' ? F.fam(id) : kind === 'person' ? F.get(id) : null;
+      m.querySelectorAll('[data-e]').forEach((el) => {
+        const [kind, id, key] = el.dataset.e.split(':'), o = getObj(kind, +id); if (!o) return;
+        el.onfocus = () => App.pushUndo();
+        el.oninput = () => { if (el.tagName === 'SELECT') return; o[key] = el.type === 'number' ? Math.round(+el.value || 0) : el.value; if (kind === 'n' && key === 'color') App.Geo.dirtyPol = true; App.R.request(); };
+        el.onchange = () => {
+          if (el.tagName === 'SELECT') { App.pushUndo(); o[key] = el.value; }
+          if (kind === 'n' && key === 'culture' && fam) { /* 文明改变不影响已有家族 */ }
+          if (el.dataset.re !== undefined || kind === 'n' || (kind === 'person' && key === 'birth')) done({ pol: kind === 'n' && key === 'color' }); else { App.changed({ ui: true }); UI.refreshTool && UI.refreshTool(); }
+        };
+      });
+      m.querySelector('[data-nrnd]').onclick = () => { App.pushUndo(); n.name = App.Names.nation(n.culture); P.renameByRank(n); done(); };
+      m.querySelector('[data-cap]').onchange = (e) => { App.pushUndo(); st.cities.forEach((c) => { if (c.type === 'capital') c.type = 'large'; }); const c = S.cities.find((k) => k.id === +e.target.value); if (c) { c.type = 'capital'; if (fam) fam.home = c.id; } done(); };
+      // 行政区
+      m.querySelector('[data-sys]').onchange = (e) => { const ns = App.ADMIN_SYS[e.target.value]; if (provs.length && !confirm('切换为「' + ns.name + '」？\n已有行政区会保留地名、改成新的级别名称' + (ns.levels < 3 ? '，并删除第三级' : '') + '。')) { again(); return; } App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.setAdminSys(n, e.target.value); done({ pol: true }); };
+      m.querySelectorAll('[data-ptog]').forEach((b) => (b.onclick = () => { UI.profOpen[b.dataset.ptog] = !UI.profOpen[b.dataset.ptog]; again(); }));
+      m.querySelectorAll('[data-prnd]').forEach((b) => (b.onclick = () => { const p = App.province(+b.dataset.prnd); App.pushUndo(); Object.assign(p, App.Names.provFor(n, p.level || 1)); done(); }));
+      m.querySelectorAll('[data-pdel]').forEach((b) => (b.onclick = () => { const p = App.province(+b.dataset.pdel); if (kids(p.id).length && !confirm(`删除「${p.name}」及其全部下级？`)) return; App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.deleteProvince(p.id); done({ pol: true }); }));
+      m.querySelectorAll('[data-padd]').forEach((b) => (b.onclick = () => { const par = App.province(+b.dataset.padd); App.pushUndo(); const p = App.Ops.addProvince(n.id, null, par ? (par.level || 1) + 1 : 1, par ? par.id : 0); if (par) UI.profOpen[par.id] = true; T().activeNation = n.id; T().activeProv = p.id; UI.toast(`已新增「${p.name}」，点 ✎ 到地图上涂出它的范围`); done(); }));
+      m.querySelectorAll('[data-ppaint]').forEach((b) => (b.onclick = () => { m.hidden = true; T().activeNation = n.id; T().activeProv = +b.dataset.ppaint; T().set('prov'); UI.refresh(); UI.refreshTool(); UI.toast('用行政区画笔在地图上涂色，完成后按 I 回到国家档案'); }));
+      m.querySelector('[data-pauto]').onclick = () => { const k = +m.querySelector('[data-pk]').value || 0; App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.autoProvinces(n.id, k); done({ pol: true }); };
+      m.querySelector('[data-psub]').onclick = () => { App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.autoProvinces(n.id, 0, Math.random, { keepL1: true }); done({ pol: true }); };
+      // 城市
+      m.querySelectorAll('[data-cdel]').forEach((b) => (b.onclick = () => { App.pushUndo(); S.cities = S.cities.filter((c) => c.id !== +b.dataset.cdel); done(); }));
+      m.querySelectorAll('[data-cgo]').forEach((b) => (b.onclick = () => { const c = S.cities.find((k) => k.id === +b.dataset.cgo); T().set('select'); T().select({ kind: 'cities', id: c.id }); zoomTo(c.x, c.y); }));
+      m.querySelectorAll('[data-cgen]').forEach((b) => (b.onclick = () => { const rep = b.dataset.cgen === 'replace'; if (rep && st.cities.length && !confirm(`删除「${n.name}」现有的 ${st.cities.length} 座城市，按地理重新生成？（可撤销）`)) return; App.pushUndo(); const out = P.genCities(n.id, Math.random, { replace: rep }); UI.toast(out.length ? `新增 ${out.length} 座城市` : '可用土地有限，没有合适的新城址'); done(); }));
+      // 军队
+      m.querySelectorAll('[data-adel]').forEach((b) => (b.onclick = () => { App.pushUndo(); S.armies = S.armies.filter((a) => a.id !== +b.dataset.adel); done(); }));
+      m.querySelectorAll('[data-ago]').forEach((b) => (b.onclick = () => { const a = S.armies.find((k) => k.id === +b.dataset.ago); T().set('select'); T().select({ kind: 'armies', id: a.id }); zoomTo(a.x, a.y); }));
+      m.querySelector('[data-aadd]').onclick = () => { App.pushUndo(); const [x, y] = P.armySpot(n, S.armies.filter((a) => a.nation === n.id).length); S.armies.push({ id: App.nid(), x, y, nation: n.id, type: 'infantry', strength: '1万', name: '' }); done(); };
+      m.querySelectorAll('[data-agen]').forEach((b) => (b.onclick = () => { const rep = b.dataset.agen === 'replace'; if (rep && st.armies.length && !confirm(`删除「${n.name}」现有的 ${st.armies.length} 支部队，重新生成？（可撤销）`)) return; App.pushUndo(); const out = P.genArmies(n, { replace: rep }); UI.toast(`生成 ${out.length} 支部队，共 ${P.troopStr(out.reduce((s2, a) => s2 + P.troops(a.strength), 0))}`); done(); }));
+      // 家族
+      m.querySelectorAll('[data-fam-open]').forEach((a) => (a.onclick = () => { m.hidden = true; App.Family.fid = fam.id; App.Family.show(); }));
       m.querySelector('[data-dyn]').onclick = () => {
         if (fam && !confirm(`重新生成「${n.name}」的统治家族？\n原来的「${fam.name}」会保留，但不再是统治家族。`)) return;
-        App.pushUndo(); if (fam) fam.ruling = 0; P.makeDynasty(n); App.changed({ ui: true }); again();
+        App.pushUndo(); if (fam) fam.ruling = 0; P.makeDynasty(n); done();
       };
-      const pd = m.querySelector('[data-pick-dyn]'); if (pd) pd.onchange = () => { const f = App.Family.fam(+pd.value); if (!f) return; App.pushUndo(); if (fam) fam.ruling = 0; n.dynasty = f.id; f.ruling = n.id; f.house = t.house; P.crown(n, f); App.changed({ ui: true }); again(); };
-      const vc = m.querySelector('[data-vcol]'); if (vc) vc.onclick = () => { App.pushUndo(); vas.forEach((v, i) => (v.color = U.shade(n.color, (i % 2 ? -0.18 : 0.22) + (i / vas.length) * 0.1))); App.changed({ pol: true, ui: true }); again(); };
+      const hs = m.querySelector('[data-heir]'); if (hs) hs.onchange = () => { App.pushUndo(); S.people.forEach((q2) => { if (q2.family === fam.id && q2.position === t.heir) q2.position = '无'; }); const h = F.get(+hs.value); if (h) h.position = t.heir; done(); };
+      const pd = m.querySelector('[data-pick-dyn]'); if (pd) pd.onchange = () => { const f = F.fam(+pd.value); if (!f) return; App.pushUndo(); if (fam) fam.ruling = 0; n.dynasty = f.id; f.ruling = n.id; f.house = t.house; P.crown(n, f); done(); };
+      const vc = m.querySelector('[data-vcol]'); if (vc) vc.onclick = () => { App.pushUndo(); vas.forEach((v, i) => (v.color = U.shade(n.color, (i % 2 ? -0.18 : 0.22) + (i / vas.length) * 0.1))); done({ pol: true }); };
+      m.querySelectorAll('[data-goto]').forEach((a) => (a.onclick = () => UI.profile(+a.dataset.goto)));
       const lt = m.querySelector('[data-lore]'); lt.onfocus = () => App.pushUndo(); lt.oninput = () => { n.lore = lt.value; App.autosave(); };
       m.querySelector('[data-lore-gen]').onclick = () => { App.pushUndo(); n.lore = P.genLore(n); App.autosave(); again(); };
-      m.querySelector('[data-hl]').onclick = () => { m.hidden = true; T().highlight(n.id); const c = App.Geo.nationComps(n.id); if (c.length) App.R.zoomToBox(c.reduce((a, q) => [Math.min(a[0], q.box[0]), Math.min(a[1], q.box[1]), Math.max(a[2], q.box[2]), Math.max(a[3], q.box[3])], [1e9, 1e9, -1e9, -1e9])); };
+      m.querySelector('[data-hl]').onclick = () => { m.hidden = true; T().highlight(n.id); const c = App.Geo.nationComps(n.id); if (c.length) App.R.zoomToBox(c.reduce((a, q2) => [Math.min(a[0], q2.box[0]), Math.min(a[1], q2.box[1]), Math.max(a[2], q2.box[2]), Math.max(a[3], q2.box[3])], [1e9, 1e9, -1e9, -1e9])); };
       m.querySelector('[data-rank]').onclick = UI.powerDialog;
     });
   };
