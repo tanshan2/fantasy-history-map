@@ -95,6 +95,8 @@
     c.fillStyle = '#f1e9d6'; c.fillRect(0, 0, WW, HH);
     c.globalAlpha = st.tintA; c.drawImage(G.tintCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
     S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.fillStyle = U.rgba(n.color, st.nationA); c.fill(p, 'evenodd'); });
+    // 附庸 / 封国：叠一层宗主颜色的斜纹
+    if (S.meta.showVassal !== false) S.nations.forEach((n) => { const ov = n.overlord && App.nation(n.overlord), p = G.nationPaths.get(n.id); if (!ov || !p) return; c.fillStyle = vassalPat(c, ov.color); c.globalAlpha = Math.min(0.5, st.nationA * 0.7); c.fill(p, 'evenodd'); c.globalAlpha = 1; });
     c.globalAlpha = st.band; c.drawImage(G.bandCanvas, 0, 0, WW, HH); c.globalAlpha = 1;
     if (S.meta.showClimate) { c.globalAlpha = 0.62; c.drawImage(App.Climate.canvas, 0, 0, WW, HH); c.globalAlpha = 1; }
     c.globalAlpha = st.paper; c.globalCompositeOperation = 'multiply'; c.fillStyle = pats.paper; c.fillRect(0, 0, WW, HH); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1;
@@ -182,6 +184,14 @@
   };
 
   // ---- 选中国家高亮：聚光、光晕、飞地标注 ----
+  const VPAT = new Map();
+  const vassalPat = (c, col) => {
+    if (VPAT.has(col)) return VPAT.get(col);
+    const k = 26, cv = document.createElement('canvas'); cv.width = cv.height = k; const g = cv.getContext('2d');
+    g.strokeStyle = U.shade(col, -0.12); g.lineWidth = 3.2; g.lineCap = 'square';
+    for (const o of [-k, 0, k]) { g.beginPath(); g.moveTo(o, k); g.lineTo(o + k, 0); g.stroke(); }
+    const p = c.createPattern(cv, 'repeat'); VPAT.set(col, p); return p;
+  };
   const drawHighlight = (c, id, s, sw, coast, vec) => {
     const G = App.Geo, p = G.nationPaths.get(id), n = App.nation(id); if (!p || !n) return;
     c.save();
@@ -194,7 +204,7 @@
     c.save(); c.clip(p, "evenodd"); c.globalCompositeOperation = "screen"; c.fillStyle = U.rgba(U.shade(n.color, 0.55), 0.32); c.fillRect(-WW, -HH, WW * 3, HH * 3); c.restore();
     // 3) 金色光晕描边
     c.lineJoin = "round";
-    [[9, 0.16], [5.5, 0.3], [3, 0.55]].forEach(([w, a]) => { c.strokeStyle = `rgba(255,214,110,)`; c.lineWidth = sw(w); c.stroke(p); });
+    [[9, 0.16], [5.5, 0.3], [3, 0.55]].forEach(([w, a]) => { c.strokeStyle = `rgba(255,214,110,${a})`; c.lineWidth = sw(w); c.stroke(p); });
     c.strokeStyle = "#fff3c4"; c.lineWidth = sw(1.3); c.stroke(p);
     c.restore();
     // 4) 飞地：虚线圈 + 标注
