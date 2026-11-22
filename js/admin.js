@@ -51,7 +51,7 @@
   App.Ops.setAdminSys = (n, key) => {
     n.adminSys = key; const sys = App.ADMIN_SYS[key];
     const S = App.S;
-    if (sys.levels < 3) S.provinces.filter((p) => p.nation === n.id && p.level === 3).forEach((p) => App.Ops.deleteProvince(p.id));
+    if (sys.levels < 3) App.Ops.deleteProvinces(S.provinces.filter((p) => p.nation === n.id && p.level === 3).map((p) => p.id));
     S.provinces.filter((p) => p.nation === n.id).forEach((p) => {
       const forms = sys.lv[p.level || 1], form = forms[Math.floor(U.hash(p.id, 3, 5) * forms.length)];
       const base = App.Names.baseOf(p);
