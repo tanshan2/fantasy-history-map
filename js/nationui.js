@@ -8,6 +8,9 @@
   const CT = { capital: '首都', large: '大城', medium: '中城', small: '小城', village: '村镇', fortress: '要塞', port: '港口', pass: '关隘' };
 
   // ---------- 国体 / 分封 / 宗主 选择控件（国家页与档案共用） ----------
+  // 附庸身份选项：保持原国体 / 周制诸侯 / 历代封国
+  UI.vassalOpts = (cur) => `<option value="keep" ${cur === 'keep' ? 'selected' : ''}>普通附庸（保持原国体）</option>`
+    + Object.entries(App.FIEF_SYS).map(([k, s]) => `<optgroup label="${k === 'zhou' ? '中国诸侯国（周制）' : esc(s.name)}">${s.tiers.map((t) => opt(k + ':' + t.id, cur, (k === 'zhou' ? '诸侯' : '') + t.name + '（' + (t.short || t.ruler) + '）')).join('')}</optgroup>`).join('');
   UI.polityFields = (n) => {
     const r = P.rankOf(n), t = P.title(n), S = App.S;
     const isSub = (id) => { let k = App.nation(id), g = 0; while (k && g++ < 50) { if (k.overlord === n.id) return true; k = App.nation(k.overlord); } return false; };
@@ -33,6 +36,7 @@
         .sort((a, b) => (pos.get(b.id)?.power ?? -1) - (pos.get(a.id)?.power ?? -1))
         .map((k) => { const s = pos.get(k.id); return opt(k.id, n.overlord || 0, (s ? '第' + s.place + '名 · ' : '') + (k.name || '（未命名）') + (s ? '（国力 ' + s.power.toFixed(0) + '）' : '')); }).join('');
     })()}</select></div>
+      ${n.overlord ? `<div class="field"><label>附庸身份（对宗主的封号）</label><select data-pol="vassalAs">${UI.vassalOpts(r.id === 'fief' ? (n.fiefSys || 'zhou') + ':' + t.tier.id : 'keep')}</select></div>` : ''}
       <div class="field"><label>建国年份</label><input type="number" data-pol="founded" value="${P.founded(n)}"></div>
       <div class="row wrap"><button class="btn small" data-pol-act="rename" title="保留国名主体，换成「${esc(t.suf)}」等称号">按国体改名</button></div>`;
     return h;
@@ -44,13 +48,14 @@
       if (k === 'founded') n.founded = Math.round(+el.value || 0);
       else if (k === 'overlord') n.overlord = +el.value || 0;
       else if (k === 'fiefSys') { n.fiefSys = el.value; n.fiefTitle = App.FIEF_SYS[el.value].tiers[0].id; }
+      else if (k === 'vassalAs') { if (el.value === 'keep') { if (n.rank === 'fief') n.rank = P.guessRank(n) === 'fief' ? 'kingdom' : P.guessRank(n); } else { const [s, ti] = el.value.split(':'); n.rank = 'fief'; n.fiefSys = s; n.fiefTitle = ti; } }
       else if (k === 'rank' && el.value.includes(':')) { const [s, ti] = el.value.split(':'); n.rank = 'fief'; n.fiefSys = s; n.fiefTitle = ti; }
       else if (k === 'rank' && el.value === 'fief') { n.rank = 'fief'; if (!n.fiefSys || n.fiefSys === 'zhou') { n.fiefSys = n.culture === 'wa' ? 'edo' : 'han'; n.fiefTitle = App.FIEF_SYS[n.fiefSys].tiers[0].id; } }
       else n[k] = el.value;
       if (k === 'rank' && el.value === 'fief' && !n.fiefSys) n.fiefSys = n.culture === 'wa' ? 'edo' : 'zhou';
       if (k === 'overlord' && n.overlord && P.rankOf(n).id === 'fief') { /* 宗室封国的家族沿用宗主姓氏：在重新生成统治家族时体现 */ }
       // 称号变化时，现任统治家族的头衔随之更新
-      if (['rank', 'fiefSys', 'fiefTitle'].includes(k)) { const f = P.dynasty(n); if (f) { f.house = P.title(n).house; P.crown(n, f); } }
+      if (['rank', 'fiefSys', 'fiefTitle', 'vassalAs'].includes(k)) { const f = P.dynasty(n); if (f) { f.house = P.title(n).house; P.crown(n, f); } }
       App.changed({ pol: k === 'overlord', ui: true }); after && after();
     }));
     root.querySelectorAll('[data-pol-act=rename]').forEach((b) => (b.onclick = () => { App.pushUndo(); P.renameByRank(n); App.changed({ ui: true }); UI.refreshTool && UI.refreshTool(); after && after(); }));
