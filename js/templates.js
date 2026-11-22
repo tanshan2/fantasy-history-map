@@ -273,7 +273,7 @@
     forestEU(S, pj.inv);
     EU.rivers.forEach(([name, w, pts]) => S.rivers.push({ id: App.nid(), name, pts: g.world(pts), width: w * 0.9 }));
     climateEU(S, pj.inv);
-    S.meta.name = '欧洲模板'; S.meta.year = 1; S.meta.vec = 'europe';
+    S.meta.name = '欧洲模板'; S.meta.year = 1; S.meta.vec = 'europe'; S.meta.geo = 'europe';
     App.undoStack.length = 0; App.redoStack.length = 0;
     TP.ensureVec('europe');
     return S;
