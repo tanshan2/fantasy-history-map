@@ -144,7 +144,7 @@
     if (S.nations.length > 1 && !MS.size) h += '<p class="muted" style="margin:4px 0">勾选方框或 Shift / Ctrl + 点击可多选国家，批量设附庸、改国体等。</p>';
     h += '<ul class="list">' + S.nations.map((n) => `<li class="${n.id === T().activeNation ? 'on' : ''} ${MS.has(n.id) ? 'msel' : ''}" data-nation="${n.id}"><input type="checkbox" class="mck" data-mck="${n.id}" ${MS.has(n.id) ? 'checked' : ''} title="多选"><i style="background:${n.color}"></i><span>${U.esc(n.name) || "（未命名）"}</span><small>${App.Polity.title(n).name}${n.overlord ? '·附庸' : ''} · ${counts.get(n.id) || 0}格</small></li>`).join('') + '</ul>';
     if (!S.nations.length) h += '<p class="muted">还没有国家。新建一个，然后用左侧「国家」工具在地图上涂色。</p>';
-    if (an) {
+    if (an && !MS.size) {  // 多选时不显示单个国家的编辑卡片
       h += `<div class="card"><h4>编辑：${U.esc(an.name) || "未命名区域"}</h4>
         ${field('国名', `<div class="row"><input type="text" data-n="name" value="${U.esc(an.name)}"><button class="btn" data-act="rndName" title="按文明随机">🎲</button></div>`)}
         ${field('颜色', `<input type="color" data-n="color" value="${an.color}">`)}
