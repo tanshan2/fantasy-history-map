@@ -33,6 +33,11 @@
     steppe: { river: sp('川 水'), desert: sp('泉 沙'), mountain: sp('山 岭'), plain: sp('原'), cold: sp('寒'), coast: sp('海') },
     nanyang: { coast: sp('港 埠 湾'), river: sp('河'), mountain: sp('山') },
     tianzhu: { coast: sp('港') }, persia: { coast: sp('港') },
+    korea: { river: sp('川 津 江'), coast: sp('浦 津 海'), mountain: sp('山 岭'), plain: sp('原 平') },
+    diannan: { river: sp('川 江'), mountain: sp('山 岭 关'), plain: sp('甸 坝') },
+    tubo: { river: sp('曲 藏布'), mountain: sp('冈 拉 日'), coast: sp('措'), cold: sp('冈') },
+    annam: { river: sp('江 津'), coast: sp('海 门 港'), mountain: sp('山 关') },
+    siam: { river: sp('河'), coast: sp('港') }, burma: { river: sp('河'), coast: sp('港') }, khmer: { river: sp('河'), coast: sp('港') }, tamil: { coast: sp('港 帕特南') },
   };
   const EAST_SUF = /(城|帐|王庭|牙帐|堡|川|港|埠|补罗|巴德|京|津|宫)$/;
   // 西方文明：按地形换词尾（再统一音译成中文）
@@ -116,7 +121,7 @@
       return App.Translit.name(raw);
     }
     const base = NM.gen(cul, 'city', r), t = FEAT_EAST[cul];
-    if (t && f && t[f] && r() < 0.7) return (base.replace(EAST_SUF, '') || base) + P(t[f], r);
+    if (t && f && t[f] && r() < 0.7) return (NM.stripSuffix(base.replace(EAST_SUF, '')) || base) + P(t[f], r);
     return base;
   };
   // 新签名：city(文明, 随机数, 世界坐标 x, y)
