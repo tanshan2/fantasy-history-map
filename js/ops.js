@@ -38,6 +38,7 @@
     const S = App.S;
     for (let c = 0; c < N; c++) if (S.owner[c] === id) { S.owner[c] = 0; S.prov[c] = 0; S.prov2[c] = 0; S.prov3[c] = 0; }
     S.nations = S.nations.filter((n) => n.id !== id);
+    S.nations.forEach((v) => { if (v.overlord === id) v.overlord = 0; });
     S.provinces = S.provinces.filter((p) => p.nation !== id);
     S.armies = S.armies.filter((a) => a.nation !== id);
     S.arrows = S.arrows.filter((a) => a.nation !== id);
