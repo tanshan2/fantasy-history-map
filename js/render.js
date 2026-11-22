@@ -140,6 +140,14 @@
       c.fillStyle = pats.paper; c.globalAlpha = 0.35; c.fillRect(0, 0, WW, HH); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
     }
     if (!exp && App.Tools && App.Tools.hl) drawHighlight(c, App.Tools.hl, s, sw, coast, vec);
+    // 多选的国家：提亮 + 金色虚线描边
+    if (!exp && App.Tools && App.Tools.multi && App.Tools.multi.size) {
+      c.save(); if (vec) c.clip(coast, 'evenodd');
+      App.Tools.multi.forEach((id) => { const p = G.nationPaths.get(id), n = App.nation(id); if (!p || !n) return; c.save(); c.clip(p, 'evenodd'); c.globalCompositeOperation = 'screen'; c.fillStyle = U.rgba(U.shade(n.color, 0.55), 0.3); c.fillRect(0, 0, WW, HH); c.restore(); });
+      c.lineJoin = 'round'; c.setLineDash([sw(6), sw(4)]);
+      App.Tools.multi.forEach((id) => { const p = G.nationPaths.get(id); if (!p) return; c.strokeStyle = 'rgba(40,24,8,.7)'; c.lineWidth = sw(4); c.stroke(p); c.strokeStyle = '#ffd76e'; c.lineWidth = sw(2.2); c.stroke(p); });
+      c.setLineDash([]); c.restore();
+    }
     // 城市
     const u = 6 * Math.pow(s, 0.5) / s;
     R.cityBoxes = [];
