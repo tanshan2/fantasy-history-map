@@ -371,10 +371,12 @@
       if (T.cur === 'river') S.rivers.push({ id: App.nid(), pts, width: T.opt.riverWidth });
       else if (T.cur === 'line') S.lines.push({ id: App.nid(), pts, style: T.opt.lineStyle });
       else if (T.cur === 'wall') {
-        const wp = T.opt.wallRidge ? App.Walls.snapRidge(pts) : pts;
-        S.lines.push({ id: App.nid(), pts: wp, style: 'wall', wall: T.opt.wallType, towers: T.opt.wallTowers, name: '' });
-        const ps = T.opt.wallPass ? App.Walls.autoPasses(wp) : [];
+        // 长城完全按你画的样子保存；是否沿山脊修整，画完再问
+        const wl = { id: App.nid(), pts, style: 'wall', wall: T.opt.wallType, towers: T.opt.wallTowers, name: '' };
+        S.lines.push(wl);
+        const ps = T.opt.wallPass ? App.Walls.autoPasses(pts) : [];
         App.UI.toast(ps.length ? '长城已建成，新设关隘：' + ps.map((k) => k.name).join('、') : '长城已建成');
+        if (T.opt.wallRidge && App.Refine) App.Refine.ask(null, { msg: '⛰ 要让这段长城沿附近的山脊走吗？（不修整就保留你画的样子）', yes: '沿山脊修整', onYes: () => { App.pushUndo(); wl.pts = App.Walls.snapRidge(wl.pts); App.changed({}); App.UI.toast('已沿山脊修整，Ctrl/⌘+Z 可撤回'); } });
       }
       else if (T.cur === 'arrow') S.arrows.push({ id: App.nid(), pts, nation: T.activeNation, width: T.opt.arrowWidth });
       App.changed({});
