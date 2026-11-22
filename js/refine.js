@@ -138,13 +138,18 @@
     }
     return b;
   };
-  RF.ask = (stroke) => {
-    pending = stroke;
+  // opt：{ msg, yes, onYes } 供其他工具（如长城）画完询问
+  RF.ask = (stroke, opt) => {
+    pending = opt ? { custom: opt } : stroke;
     const b = box(); b.querySelector('[data-r=never]').checked = false; b.hidden = false;
+    b.querySelector('span').textContent = opt ? opt.msg : '✨ 要用 AI 把这次画的边界修整得更像真实疆界吗？';
+    b.querySelector('[data-r=yes]').textContent = (opt && opt.yes) || '修整';
+    b.querySelector('.ck').style.display = opt ? 'none' : '';
   };
   RF.dismiss = () => { pending = null; const b = document.getElementById('refineAsk'); if (b) b.hidden = true; };
   RF.answer = (yes) => {
     const s = pending; RF.dismiss(); if (!s || !yes) return;
+    if (s.custom) { s.custom.onYes(); return; }
     if (!s.snap || !s.snap.arrs) { App.UI.toast('找不到这一笔的记录，无法修整'); return; }
     App.UI.busy('AI 正在修整边界…', () => {
       App.pushUndo(s.tool === 'prov' ? ['prov', 'prov2', 'prov3'] : ['owner', 'prov', 'prov2', 'prov3']);
