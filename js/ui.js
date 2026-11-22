@@ -52,6 +52,7 @@
     };
     $('#mapName').addEventListener('change', (e) => { App.S.meta.name = e.target.value; App.autosave(); });
     $('#btnFamily').onclick = () => App.Family.show();
+    $('#btnPower').onclick = () => UI.powerDialog(); $('#btnProfile').onclick = () => UI.profileCurrent();
     UI.refreshTool(); UI.refresh();
   };
 
@@ -138,7 +139,7 @@
     const S = App.S, an = App.nation(T().activeNation);
     const counts = new Map(); for (let c = 0; c < App.N; c++) { const o = S.owner[c]; if (o) counts.set(o, (counts.get(o) || 0) + 1); }
     let h = `<div class="row"><button class="btn pri" data-act="addNation">＋ 新建国家</button><select data-act="newCulture" title="新国家的文明">${App.CULTURES.map((c) => `<option value="${c.id}" ${c.id === UI.newCulture ? 'selected' : ''}>${c.name}</option>`).join('')}</select></div>`;
-    h += '<ul class="list">' + S.nations.map((n) => `<li class="${n.id === T().activeNation ? 'on' : ''}" data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name) || "（未命名）"}</span><small>${App.CULTURES.find((c) => c.id === n.culture)?.name || ''} · ${counts.get(n.id) || 0}格</small></li>`).join('') + '</ul>';
+    h += '<ul class="list">' + S.nations.map((n) => `<li class="${n.id === T().activeNation ? 'on' : ''}" data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name) || "（未命名）"}</span><small>${App.Polity.title(n).name}${n.overlord ? '·附庸' : ''} · ${counts.get(n.id) || 0}格</small></li>`).join('') + '</ul>';
     if (!S.nations.length) h += '<p class="muted">还没有国家。新建一个，然后用左侧「国家」工具在地图上涂色。</p>';
     if (an) {
       h += `<div class="card"><h4>编辑：${U.esc(an.name) || "未命名区域"}</h4>
@@ -146,6 +147,8 @@
         ${field('颜色', `<input type="color" data-n="color" value="${an.color}">`)}
         ${field('文明', cultureSel(an.culture, 'nCulture'))}
         ${field("行政区划制度", `<select data-act="adminSys">${UI.sysOptions(an)}</select>`)}<p class="muted">${U.esc(App.sysOf(an).note || "")}</p>
+        ${UI.polityFields(an)}
+        <div class="row wrap"><button class="btn pri" data-act="profile">📜 国家档案</button><button class="btn" data-act="mkDyn">${App.Polity.dynasty(an) ? '重新生成统治家族' : '生成统治家族'}</button></div>
         <p class="muted">国名自动显示在领土最宽处，不能拖动。</p>
         ${UI.territoryInfo(an)}
         <div class="row wrap"><button class="btn" data-act="rndAll">🎲 全部重新命名（国、各级行政区、城）</button></div>
@@ -154,7 +157,7 @@
         <div class="row wrap"><button class="btn" data-act="autoProv">重新划分全部</button><button class="btn" data-act="autoSub">保留${App.levelName(an, 1)}，只细分下级</button></div>
         <div class="row wrap"><button class="btn" data-act="autoCity">自动生成城市</button><button class="btn danger" data-act="delNation">删除国家</button></div></div>`;
     }
-    h += `<div class="row wrap"><button class="btn" data-act="autoAll">一键划分所有国家的行政区</button><button class="btn" data-act="recolor">相邻国家自动配色</button><button class="btn" data-act="family">家族 / 族谱…</button></div>`;
+    h += `<div class="row wrap"><button class="btn" data-act="autoAll">一键划分所有国家的行政区</button><button class="btn" data-act="recolor">相邻国家自动配色</button><button class="btn" data-act="family">家族 / 族谱…</button><button class="btn" data-act="power">国力排名</button></div>`;
     return h;
   };
   UI.tab_provs = () => {
@@ -188,7 +191,7 @@
     let h = `<div class="card"><h4>画风</h4><div class="chips">${Object.entries(App.R.STYLES).map(([id, s]) => `<button class="chip ${m.style === id ? 'on' : ''}" data-style="${id}">${s.name}</button>`).join('')}</div>
       ${field('城市样式', `<div class="chips"><button class="chip ${m.cityStyle === 'icon' ? 'on' : ''}" data-city="icon">插画图标</button><button class="chip ${m.cityStyle !== 'icon' ? 'on' : ''}" data-city="dot">简洁圆点</button></div>`)}</div>
     <div class="card"><h4>行政区显示</h4>${ck('lv1', '省（一级）')}${ck('lv2', '道（二级）')}${ck('lv3', '府（三级）')}<br>${ck('showProvLabels', '显示行政区名')}</div>
-    <div class="card"><h4>显示</h4>${ck('showIcons', '山脉/森林图标')}${ck('showGrid', '网格')}${ck('showCityLabels', '城市名')}${ck('showArmies', '军队与箭头')}${ck("showFamilies", "家族旗帜")}${ck("showClimate", "气候图")}</div>
+    <div class="card"><h4>显示</h4>${ck('showIcons', '山脉/森林图标')}${ck('showGrid', '网格')}${ck('showCityLabels', '城市名')}${ck('showArmies', '军队与箭头')}${ck("showFamilies", "家族旗帜")}${ck("showVassal", "附庸/封国斜纹")}${ck("showClimate", "气候图")}</div>
     ${m.showClimate ? `<div class="card"><h4>气候图例</h4><div class="legend">${App.Climate.LIST.filter(Boolean).map((k) => `<div><i style="background:${k.color}"></i><b>${k.name}</b><small>${k.desc}</small></div>`).join("")}</div><p class="muted">用「地貌」工具切到「画气候」可以手动修改气候带。</p></div>` : ""}
     <div class="card"><h4>字体与颜色</h4>${field('中文字体', `<select data-meta-s="labelFont">${fonts.map((f) => `<option ${f === m.labelFont ? 'selected' : ''}>${f}</option>`).join('')}</select>`)}
     ${field('西文字体', `<select data-meta-s="latinFont">${lfonts.map((f) => `<option ${f === m.latinFont ? 'selected' : ''}>${f}</option>`).join('')}</select>`)}
@@ -241,6 +244,10 @@
     act('provK', (b) => (UI.provK = +b.value));
     act("autoSub", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, 0, Math.random, { keepL1: true }); App.changed({ pol: true, ui: true }); });
     act("family", () => App.Family.show());
+    act('power', () => UI.powerDialog());
+    act('profile', () => UI.profile(an.id));
+    act('mkDyn', () => { const f = App.Polity.dynasty(an); if (f && !confirm('重新生成「' + an.name + '」的统治家族？原家族会保留。')) return; App.pushUndo(); if (f) f.ruling = 0; App.Polity.makeDynasty(an); App.changed({ ui: true }); UI.toast('已生成 ' + App.Polity.dynasty(an).name + '（' + App.Polity.title(an).house + '）'); });
+    if (an && UI.bindPolityFields) UI.bindPolityFields(p, an, () => UI.refreshTool());
     act('adminSys', (b) => { const ns = App.ADMIN_SYS[b.value], has = S.provinces.some((p) => p.nation === an.id); if (has && !confirm('切换为「' + ns.name + '」？\n已有行政区会保留地名、改成新的级别名称' + (ns.levels < 3 ? '，并删除第三级' : '') + '。')) { UI.refresh(); return; } App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.setAdminSys(an, b.value); App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('autoAll', () => { const redo = App.S.provinces.length && confirm('已有行政区的国家也重新划分吗？\n确定＝全部重新划分，取消＝只划分还没有行政区的'); App.pushUndo(['prov', 'prov2', 'prov3']); const k = App.Ops.autoAllProvinces(redo); App.changed({ pol: true, ui: true }); UI.toast('已划分 ' + k + ' 个国家'); });
     act("autoProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, UI.provK || 0); App.changed({ pol: true, ui: true }); });
@@ -306,6 +313,7 @@
     m.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => (m.hidden = true)));
     onBind && onBind(m);
   };
+  UI.modal = modal;
   UI.newDialog = () => modal(`<h3>新建地图</h3>
     <div class="opts3">
       <div class="card"><h4>亚洲模板</h4><p class="muted">你那张图的真实亚洲地理：海岸线、山脉、沙漠、森林、河流、湖泊、气候都在，但没有任何国家，直接用「彩笔」涂色。</p><button class="btn pri" id="nAsia">载入亚洲模板</button>
@@ -381,6 +389,8 @@
       ${row(K('7') + ' / ' + K('N'), '国家')}${row(K('8') + ' / ' + K('P'), '行政区')}
       ${row(K('9') + ' / ' + K('C'), '城市')}${row(K('0') + ' / ' + K('J'), '军队')}
       ${row(K('H'), '平移')}${row(K('K'), '线条')}${row(K('U'), '进军箭头')}${row(K('M'), '标记')}${row(K('X'), '文字')}
+      <h4>国家</h4>
+      ${row(K('I'), '国家档案（当前高亮或选中的国家）')}${row(K('O'), '国力排名')}
       <h4>画笔</h4>
       ${row(K('[') + ' ' + K(']'), '笔刷变小 / 变大（加 Shift 每次 5）')}
       ${row(K('Alt') + ' + 滚轮', '调笔刷大小')}
