@@ -103,7 +103,7 @@
     angkor: S([null, ['省'], ['区'], ['村']], { name: '吴哥·省—区—村', cul: 'khmer', levels: 3, per: 1200, kids: [null, null, [3, 8], [3, 8]], note: '吴哥王朝以王城为中心，各省由王族或高僧家族治理，区下有村社与寺田。' }),
   });
   Object.assign(App.ADMIN_AREA, { joseon: [0, 28000, 3000, 700], silla: [0, 25000, 2500, 600], nanzhao: [0, 100000, 12000, 2500], tusi: [0, 50000, 8000, 1500],
-    tubo: [0, 300000, 25000, 5000], daiviet: [0, 22000, 4000, 900], chola: [0, 60000, 8000, 1500], muang: [0, 35000, 5000, 900], myo: [0, 40000, 5000, 900], angkor: [0, 30000, 4500, 900] });
+    tubo: [0, 120000, 10000, 2000], daiviet: [0, 22000, 4000, 900], chola: [0, 60000, 8000, 1500], muang: [0, 35000, 5000, 900], myo: [0, 40000, 5000, 900], angkor: [0, 30000, 4500, 900] });
   Object.assign(App.DEFAULT_SYS, App.CULT_DEFAULT_SYS);
   // 去掉这些文明地名后缀，得到地名主体
   const s0 = App.Names.stripSuffix;
