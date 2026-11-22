@@ -228,3 +228,5 @@ kbd{display:inline-block;min-width:22px;text-align:center;padding:1px 6px;border
 .mchips .chip i{width:10px;height:10px;border-radius:3px;background:var(--c)}
 .mchips .chip b{cursor:pointer;color:var(--muted);font-weight:400;margin-left:2px}.mchips .chip b:hover{color:#ff9b85}
 .card.multi .field select{width:100%}
+.mchips .chip small{color:var(--muted);font-size:11px}
+.card.multi b.gold{color:var(--gold)}
