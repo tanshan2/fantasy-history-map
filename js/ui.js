@@ -398,7 +398,7 @@
       ${row(K('空格') + ' + 拖动 / 右键或中键拖动', '拖动地图')}
       ${row(K('Home'), '回到全图')}
       ${row(K('Tab'), '隐藏 / 显示右侧面板')}
-      ${row(K('Alt') + ' + ' + K('1') + K('2') + K('3'), '切换显示 一级 / 二级 / 三级 行政区')}
+      ${row(K('Alt') + ' + ' + K('1') + K('2') + K('3'), '切换显示 一级 / 二级 / 三级 行政区')}${row('左下角 地图：政区 / 地形 / 综合', '政区图不画山林河流；地形图不画国家填色')}
       <h4>工具</h4>
       ${row(K('1') + ' / ' + K('B'), '彩笔')}${row(K('2') + ' / ' + K('V'), '选择')}
       ${row(K('3') + ' / ' + K('L'), '陆海')}${row(K('4') + ' / ' + K('T'), '地貌 / 气候')}
@@ -450,11 +450,13 @@
   };
   UI.syncLv = () => {
     document.querySelectorAll('#lvBtns [data-lv]').forEach((b) => b.classList.toggle('on', !!App.S.meta['lv' + b.dataset.lv]));
+    document.querySelectorAll('#lvBtns [data-mode]').forEach((b) => b.classList.toggle('on', (App.S.meta.mapMode || 'pol') === b.dataset.mode));
   };
   UI.initLv = () => {
     const box = document.getElementById('lvBtns'); if (!box) return;
-    box.innerHTML = '<span>行政区</span>' + [1, 2, 3].map((lv) => `<button class="chip" data-lv="${lv}">${["", "一级", "二级", "三级"][lv]}</button>`).join("");
+    box.innerHTML = '<span>地图</span>' + [['pol', '政区'], ['phys', '地形'], ['all', '综合']].map(([k, nm]) => `<button class="chip" data-mode="${k}" title="${{ pol: '只看国家和行政区，不画山、森林、河流', phys: '只看山、森林、河流，国家只画虚线边界', all: '全部叠在一起' }[k]}">${nm}</button>`).join('') + '<span class="sep"></span><span>行政区</span>' + [1, 2, 3].map((lv) => `<button class="chip" data-lv="${lv}">${["", "一级", "二级", "三级"][lv]}</button>`).join("");
     box.onclick = (e) => {
+      const md = e.target.closest('[data-mode]'); if (md) { App.S.meta.mapMode = md.dataset.mode; App.Geo.dirtyPol = true; UI.syncLv(); App.R.request(); App.autosave(); UI.toast({ pol: '政区图：不画山、森林、河流', phys: '地形图：只看山川河流森林', all: '综合：全部显示' }[md.dataset.mode]); return; }
       const b = e.target.closest('[data-lv]'); if (!b) return;
       const k = 'lv' + b.dataset.lv;
       if (e.shiftKey || e.metaKey || e.ctrlKey) { [1, 2, 3].forEach((l) => (App.S.meta['lv' + l] = String(l) === b.dataset.lv)); }
