@@ -11,14 +11,22 @@
   UI.polityFields = (n) => {
     const r = P.rankOf(n), t = P.title(n), S = App.S;
     const isSub = (id) => { let k = App.nation(id), g = 0; while (k && g++ < 50) { if (k.overlord === n.id) return true; k = App.nation(k.overlord); } return false; };
-    let h = `<div class="field"><label>国体 / 爵位</label><select data-pol="rank">${App.RANKS.map((k) => opt(k.id, r.id, k.name + (k.id !== 'fief' ? ' · ' + k.ruler + ' · ' + k.cat : ''))).join('')}</select></div>`;
+    const curRank = r.id === 'fief' && (n.fiefSys || 'zhou') === 'zhou' ? 'zhou:' + t.tier.id : r.id;
+    const grp = (label, ids) => `<optgroup label="${label}">${App.RANKS.filter((k) => ids.includes(k.id)).map((k) => opt(k.id, curRank, k.name + ' · ' + k.ruler + ' · ' + k.cat)).join('')}</optgroup>`;
+    let h = `<div class="field"><label>国体 / 爵位</label><select data-pol="rank">
+      ${grp('皇室', ['empire', 'caliphate', 'tsardom'])}${grp('王室', ['kingdom', 'khanate', 'sultanate'])}
+      <optgroup label="中国诸侯国（周制·王公侯伯子男）">${App.FIEF_SYS.zhou.tiers.map((k) => opt('zhou:' + k.id, curRank, '诸侯' + k.name + ' · ' + k.short + ' · ' + k.house)).join('')}</optgroup>
+      ${grp('欧洲及其他贵族', ['shogunate', 'grandDuchy', 'electorate', 'duchy', 'margraviate', 'marquisate', 'county', 'jarldom', 'barony'])}
+      ${grp('其他', ['republic', 'merchant', 'theocracy', 'tribe'])}
+      <optgroup label="中国历代封国（汉、晋、唐、元、明、清…）">${opt('fief', curRank === 'fief' ? 'fief' : '', '封国（再选朝代与封号）')}</optgroup>
+    </select></div>`;
     if (r.id === 'fief') {
       const sys = App.FIEF_SYS[n.fiefSys || 'zhou'] || App.FIEF_SYS.zhou;
       h += `<div class="field"><label>分封制度</label><select data-pol="fiefSys">${Object.entries(App.FIEF_SYS).map(([k, s]) => opt(k, n.fiefSys || 'zhou', s.name)).join('')}</select></div>
         <div class="field"><label>封号等级</label><select data-pol="fiefTitle">${sys.tiers.map((k) => opt(k.id, t.tier.id, k.name + '（' + k.ruler + '）')).join('')}</select></div>
         <p class="muted">${esc(sys.note)}</p>`;
     } else if (r.note) h += `<p class="muted">${esc(r.note)}</p>`;
-    h += `<div class="field"><label>宗主国${r.id === 'fief' ? '（封国须有宗主）' : '（附庸时选择）'}</label><select data-pol="overlord"><option value="0">— 独立 —</option>${(() => {
+    h += `<div class="field"><label>宗主国${r.id === 'fief' ? ((n.fiefSys || 'zhou') === 'zhou' ? '（可选周天子，也可独立）' : '（封国须有宗主）') : '（附庸时选择）'}</label><select data-pol="overlord"><option value="0">— 独立 —</option>${(() => {
       // 按国力从高到低排列，并标出名次
       const rk = P.ranking({}), pos = new Map(rk.map((s) => [s.n.id, s]));
       return S.nations.filter((k) => k.id !== n.id && !isSub(k.id))
@@ -36,6 +44,8 @@
       if (k === 'founded') n.founded = Math.round(+el.value || 0);
       else if (k === 'overlord') n.overlord = +el.value || 0;
       else if (k === 'fiefSys') { n.fiefSys = el.value; n.fiefTitle = App.FIEF_SYS[el.value].tiers[0].id; }
+      else if (k === 'rank' && el.value.includes(':')) { const [s, ti] = el.value.split(':'); n.rank = 'fief'; n.fiefSys = s; n.fiefTitle = ti; }
+      else if (k === 'rank' && el.value === 'fief') { n.rank = 'fief'; if (!n.fiefSys || n.fiefSys === 'zhou') { n.fiefSys = n.culture === 'wa' ? 'edo' : 'han'; n.fiefTitle = App.FIEF_SYS[n.fiefSys].tiers[0].id; } }
       else n[k] = el.value;
       if (k === 'rank' && el.value === 'fief' && !n.fiefSys) n.fiefSys = n.culture === 'wa' ? 'edo' : 'zhou';
       if (k === 'overlord' && n.overlord && P.rankOf(n).id === 'fief') { /* 宗室封国的家族沿用宗主姓氏：在重新生成统治家族时体现 */ }
