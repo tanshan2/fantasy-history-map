@@ -35,7 +35,7 @@
       <div class="mchips">${ns.map((n) => `<span class="chip" style="--c:${n.color}"><i></i>${esc(n.name) || '（未命名）'}<b data-munsel="${n.id}" title="移出">×</b></span>`).join('')}</div>
       <div class="row wrap"><button class="btn small" data-mall>全选</button><button class="btn small" data-mclear>清空选择</button></div>
       <div class="field"><label>设为附庸 / 封国 → 宗主国</label><select data-mset="overlord">${KEEP}<option value="0">— 全部独立 —</option>${ovList}</select></div>
-      <div class="field"><label>国体 / 爵位</label><select data-mset="rank">${KEEP}${App.RANKS.filter((r) => r.id !== 'fief').map((r) => opt(r.id, r.name + ' · ' + r.ruler)).join('')}</select></div>
+      <div class="field"><label>国体 / 爵位</label><select data-mset="rank">${KEEP}<optgroup label="中国诸侯国（周制）">${App.FIEF_SYS.zhou.tiers.map((t) => opt('zhou:' + t.id, '诸侯' + t.name + ' · ' + t.short)).join('')}</optgroup><optgroup label="其他国体">${App.RANKS.filter((r) => r.id !== 'fief').map((r) => opt(r.id, r.name + ' · ' + r.ruler)).join('')}</optgroup></select></div>
       <div class="field"><label>中国分封（封国等级）</label><select data-mset="fief">${KEEP}${fiefOpts}</select></div>
       <div class="field"><label>文明</label><select data-mset="culture">${KEEP}${App.CULTURES.map((c) => opt(c.id, c.name)).join('')}</select></div>
       <div class="field"><label>行政区划制度</label><select data-mset="adminSys">${KEEP}${sysOpts}</select></div>
@@ -62,7 +62,7 @@
         ns.forEach((n) => { n.overlord = ov; });
         return done(ov ? `${ns.length} 个国家成为「${o.name}」的附庸` : `${ns.length} 个国家改为独立`);
       }
-      if (k === 'rank') { ns.forEach((n) => { n.rank = v; const f = P.dynasty(n); if (f) { f.house = P.title(n).house; P.crown(n, f); } }); return done('已修改国体'); }
+      if (k === 'rank') { ns.forEach((n) => { if (v.includes(':')) { const [s, ti] = v.split(':'); n.rank = 'fief'; n.fiefSys = s; n.fiefTitle = ti; } else n.rank = v; const f = P.dynasty(n); if (f) { f.house = P.title(n).house; P.crown(n, f); } }); return done('已修改国体'); }
       if (k === 'fief') {
         const [sys, tier] = v.split(':'); ns.forEach((n) => { n.rank = 'fief'; n.fiefSys = sys; n.fiefTitle = tier; const f = P.dynasty(n); if (f) { f.house = P.title(n).house; P.crown(n, f); } });
         const noOv = ns.filter((n) => !n.overlord).length;
