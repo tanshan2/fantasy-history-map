@@ -84,7 +84,9 @@
     cells.forEach((c, j) => (LOC[c] = j));
     const rv = riverCached(), sd = salt * 13.7 + 5;
     const cost = new Float32Array(L);
-    cells.forEach((c, j) => { const t = S.terrain[c], x = c % W, y = (c / W) | 0; cost[j] = 1 + U.fbm(x / 9 + sd, y / 9, 3, 3) * 2.2 + (rv[c] ? 7 : 0) + (t === 5 ? 3.5 : t === 6 ? 5 : t === 4 ? 0.8 : 0) + (t === 8 ? 1 : 0); });
+    // 「海拔」：平地 0，丘陵 1，山地 2.2，雪山 3；跨越海拔落差的代价高，边界就落在山前、分水岭上，盆地自成一区
+    const ELEV = [0, 0, 0, 0.2, 1, 2.2, 3, 0.3, 0, 0.4], elev = new Float32Array(L);
+    cells.forEach((c, j) => { const t = S.terrain[c], x = c % W, y = (c / W) | 0; elev[j] = ELEV[t] || 0; cost[j] = 1 + U.fbm(x / 16 + sd, y / 16, 3, 3) * 0.9 + (rv[c] ? 7 : 0) + (t === 5 ? 1.6 : t === 6 ? 2.6 : t === 4 ? 0.4 : 0) + (t === 8 ? 0.8 : 0); });
     const nbs = (j, f) => { const c = cells[j], x = c % W; if (x > 0 && LOC[c - 1] >= 0) f(LOC[c - 1]); if (x < W - 1 && LOC[c + 1] >= 0) f(LOC[c + 1]); if (c >= W && LOC[c - W] >= 0) f(LOC[c - W]); if (c < N - W && LOC[c + W] >= 0) f(LOC[c + W]); };
     const xy = (j) => [cells[j] % W, (cells[j] / W) | 0];
     // 种子（局部下标）
@@ -93,6 +95,7 @@
     const minSep = Math.sqrt(L / k) * 0.75, seeds = [];
     const far = (j, d) => { const [x, y] = xy(j); return seeds.every((s) => { const [sx, sy] = xy(s); return Math.hypot(sx - x, sy - y) >= d; }); };
     cityJ.forEach(([j]) => { if (seeds.length < k && far(j, minSep)) seeds.push(j); });
+    const nCity = seeds.length;
     const step = Math.max(1, Math.floor(L / 2500)), sample = []; for (let j = 0; j < L; j += step) sample.push(j);
     if (!seeds.length) seeds.push(sample[Math.floor(r() * sample.length)]);
     const md = new Float32Array(sample.length).fill(Infinity);
@@ -104,9 +107,21 @@
       const best = new Float64Array(L).fill(Infinity), who = new Int32Array(L).fill(-1), h = new U.Heap();
       seeds.forEach((s, i) => { best[s] = 0; who[s] = i; h.push(0, s); });
       while (h.size) { const j = h.pop(), d = h.topK; if (d > best[j]) continue; const m = mult[who[j]], si = who[j];
-        nbs(j, (q) => { const nd = d + cost[q] * m; if (nd < best[q]) { best[q] = nd; who[q] = si; h.push(nd, q); } }); }
+        nbs(j, (q) => { const nd = d + (cost[q] + Math.abs(elev[q] - elev[j]) * 3.2) * m; if (nd < best[q]) { best[q] = nd; who[q] = si; h.push(nd, q); } }); }
       return who;
     };
+    // 劳埃德松弛：非城市种子移到所辖区域的中心附近（区域更紧凑，不会细长怪异）
+    const fixed = new Set(seeds.slice(0, nCity));
+    for (let it = 0; it < 2; it++) {
+      const w0 = grow(seeds.map(() => 1)), sx = new Float64Array(k), sy = new Float64Array(k), sn = new Float64Array(k);
+      for (let j = 0; j < L; j++) { const i = w0[j]; if (i < 0) continue; const [x, y] = xy(j); sx[i] += x; sy[i] += y; sn[i]++; }
+      for (let i = 0; i < k; i++) {
+        if (fixed.has(seeds[i]) || !sn[i]) continue;
+        const cx = sx[i] / sn[i], cy = sy[i] / sn[i]; let bj = seeds[i], bd = Infinity;
+        for (let j = 0; j < L; j++) { if (w0[j] !== i) continue; const [x, y] = xy(j), d = (x - cx) ** 2 + (y - cy) ** 2 + elev[j] * 6 + (rv[cells[j]] ? 4 : 0); if (d < bd) { bd = d; bj = j; } }
+        seeds[i] = bj;
+      }
+    }
     const target = L / k, mult = seeds.map(() => 0.85 + r() * 0.3); let who;
     for (let it = 0; it < 5; it++) {
       who = grow(mult);
@@ -121,6 +136,19 @@
       if (i < 0) { const [x, y] = xy(j); let bd = Infinity; seeds.forEach((s, t) => { const [sx, sy] = xy(s), d = (sx - x) ** 2 + (sy - y) ** 2; if (d < bd) { bd = d; i = t; } }); }
       idx[j] = i;
     }
+    // 众数平滑两遍：磨掉锯齿和犬牙交错
+    for (let pass = 0; pass < 2; pass++) {
+      const nx = idx.slice();
+      for (let j = 0; j < L; j++) {
+        const c = cells[j], x = c % W, cnt = new Map(); let own = 0, tot = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue; if (x + dx < 0 || x + dx >= W) continue; const q = c + dy * W + dx; if (q < 0 || q >= N) continue; const jq = LOC[q]; if (jq < 0) continue;
+          tot++; if (idx[jq] === idx[j]) own++; else cnt.set(idx[jq], (cnt.get(idx[jq]) || 0) + 1);
+        }
+        if (own <= 2 && tot >= 5) { let bk = -1, bv = 0; cnt.forEach((v, kk) => { if (v > bv) { bv = v; bk = kk; } }); if (bv >= 5 && !rv[c]) nx[j] = bk; }
+      }
+      idx.set(nx);
+    }
     // 清碎片：每块只保留最大连通部分（够大的海岛除外），其余并入接壤最多的相邻块
     const seen = new Uint8Array(L), pieces = [];
     for (let s = 0; s < L; s++) {
@@ -133,25 +161,28 @@
       if (biggest.get(p.id) === p) return;
       const touch = new Map(); p.comp.forEach((j) => nbs(j, (q) => { if (idx[q] !== p.id) touch.set(idx[q], (touch.get(idx[q]) || 0) + 1); }));
       let to = -1, bt = 0; touch.forEach((v, key) => { if (v > bt) { bt = v; to = key; } });
-      if (to < 0) { if (p.comp.length >= target * 0.15) return; const [x, y] = xy(p.comp[0]); let bd = Infinity; seeds.forEach((s, t) => { const [sx, sy] = xy(s), d = (sx - x) ** 2 + (sy - y) ** 2; if (d < bd && t !== p.id) { bd = d; to = t; } }); }
+      if (to < 0) { if (p.comp.length >= target * 0.3) return; const [x, y] = xy(p.comp[0]); let bd = Infinity; seeds.forEach((s, t) => { const [sx, sy] = xy(s), d = (sx - x) ** 2 + (sy - y) ** 2; if (d < bd && t !== p.id) { bd = d; to = t; } }); }
       if (to >= 0) p.comp.forEach((j) => (idx[j] = to));
     });
     cells.forEach((c) => (LOC[c] = -1));
     return { k, idx };
   };
 
-  // 自动划分行政区：按所选制度的层级数与“每个上级下辖数量”来分；每个上级至少 2 个下级（地块太小除外）
-  const MINC = [0, 40, 22, 8]; // 每级单位至少占的格数
+  // 自动划分行政区：数量按「真实面积 ÷ 该制度各级单位的历史典型面积」来定，再受历史上下辖数量范围约束
+  // 例如明代一省约 22 万平方公里、一府约 2.5 万、一县约 3500；唐代一道约 40 万、一州约 1.5 万
+  const MINC = [0, 40, 16, 6]; // 地图分辨率限制：每级单位至少占的格数
+  const areaOf = (cells) => { const ra = App.Polity.rowAreas(); let a = 0; cells.forEach((c) => (a += ra[(c / W) | 0])); return a; };
+  O.unitArea = (sys, level) => { const a = App.ADMIN_AREA[App.sysKeyOf(sys)] || [0, 200000, 25000, 3500]; return a[level] || a[a.length - 1] / 6; };
   const kidCount = (sys, level, cells, r) => {
     const [lo, hi] = sys.kids[level] || [3, 8];
-    const cap = Math.floor(cells / MINC[level]); if (cap < 2) return 1;
-    let k = lo + Math.floor(r() * (hi - lo + 1));
-    return Math.max(2, Math.min(k, cap));
+    const cap = Math.floor(cells.length / MINC[level]); if (cap < 2) return 1;
+    const want = Math.round((areaOf(cells) / O.unitArea(sys, level)) * (0.88 + r() * 0.24));
+    return Math.max(2, Math.min(cap, U.clamp(want, lo, Math.round(hi * 1.5))));
   };
   O.autoProvinces = (nid, k1, r = Math.random, opts = {}) => {
     const S = App.S, n = App.nation(nid); if (!n) return;
     const sys = App.sysOf(n), maxLv = sys.levels;
-    const cells = []; for (let c = 0; c < N; c++) if (S.owner[c] === nid) cells.push(c);
+    const cells = []; for (let c = 0; c < N; c++) if (S.owner[c] === nid && S.terrain[c] >= 2) cells.push(c);
     if (!opts.keepL1) O.deleteProvinces(S.provinces.filter((p) => p.nation === nid).map((p) => p.id));
     else O.deleteProvinces(S.provinces.filter((p) => p.nation === nid && (p.level || 1) > 1).map((p) => p.id));
     if (!cells.length) return;
@@ -160,21 +191,17 @@
       const ps = []; for (let i = 0; i < k; i++) ps.push(O.addProvince(nid, App.Names.provFor(n, level, r), level, parent ? parent.id : 0));
       const groups = ps.map(() => []);
       parentCells.forEach((c, j) => { App.provArr(level)[c] = ps[idx[j]].id; groups[idx[j]].push(c); });
-      if (level < maxLv) ps.forEach((p, i) => { const g = groups[i]; if (g.length) sub(g, level + 1, p, kidCount(sys, level + 1, g.length, r)); });
+      if (level < maxLv) ps.forEach((p, i) => { const g = groups[i]; if (g.length) sub(g, level + 1, p, kidCount(sys, level + 1, g, r)); });
     };
     if (opts.keepL1) {
       cells.forEach((c) => { S.prov2[c] = 0; S.prov3[c] = 0; });
       S.provinces.filter((p) => p.nation === nid && (p.level || 1) === 1).forEach((p) => {
         const g = cells.filter((c) => S.prov[c] === p.id); if (!g.length || maxLv < 2) return;
-        const { k, idx } = O.splitCells(g, kidCount(sys, 2, g.length, r), r, p.id * 7 + 2);
-        const ps = []; for (let i = 0; i < k; i++) ps.push(O.addProvince(nid, App.Names.provFor(n, 2, r), 2, p.id));
-        const groups = ps.map(() => []);
-        g.forEach((c, j) => { S.prov2[c] = ps[idx[j]].id; groups[idx[j]].push(c); });
-        if (maxLv >= 3) ps.forEach((q, i) => groups[i].length && sub(groups[i], 3, q, kidCount(sys, 3, groups[i].length, r)));
+        sub(g, 2, p, kidCount(sys, 2, g, r));
       });
       return;
     }
-    if (!k1) k1 = U.clamp(Math.round(cells.length / sys.per), 1, 15);
+    if (!k1) k1 = U.clamp(Math.round(areaOf(cells) / O.unitArea(sys, 1)), 1, 40);
     sub(cells, 1, null, Math.min(k1, Math.max(1, Math.floor(cells.length / MINC[1]))));
   };
   // 按地理生成城市（数量看可用土地，大小看城址的地貌、气候、河流、海岸）
