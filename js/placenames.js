@@ -33,6 +33,8 @@
     steppe: { river: sp('川 水'), desert: sp('泉 沙'), mountain: sp('山 岭'), plain: sp('原'), cold: sp('寒'), coast: sp('海') },
     nanyang: { coast: sp('港 埠 湾'), river: sp('河'), mountain: sp('山') },
     tianzhu: { coast: sp('港') }, persia: { coast: sp('港') },
+    tarim: { desert: sp('泉 碛'), river: sp('河'), mountain: sp('山') }, sogd: { river: sp('河'), desert: sp('泉') }, turk: { river: sp('水 泉'), mountain: sp('山'), desert: sp('泉') },
+    khitan: { river: sp('河 水'), mountain: sp('山') }, jurchen: { river: sp('江 河 水'), mountain: sp('山 岭') }, mongol: { river: sp('河'), mountain: sp('山') }, xiongnu: { river: sp('水'), mountain: sp('山') },
     korea: { river: sp('川 津 江'), coast: sp('浦 津 海'), mountain: sp('山 岭'), plain: sp('原 平') },
     diannan: { river: sp('川 江'), mountain: sp('山 岭 关'), plain: sp('甸 坝') },
     tubo: { river: sp('曲 藏布'), mountain: sp('冈 拉 日'), coast: sp('措'), cold: sp('冈') },
