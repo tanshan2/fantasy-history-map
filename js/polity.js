@@ -206,7 +206,7 @@
     return cs.slice().sort((a, b) => ORD.indexOf(a.type) - ORD.indexOf(b.type))[0] || null;
   };
   // 文明与国体对城市化的影响（游牧、部落城市少；华夏、波斯、罗马城市多）
-  P.URBAN = { korea: 1.1, diannan: 0.75, tubo: 0.45, annam: 1.05, siam: 0.9, burma: 0.85, khmer: 0.95, tamil: 1.1, huaxia: 1.25, persia: 1.15, latin: 1.2, greek: 1.15, arabic: 1.05, tianzhu: 1.1, wa: 0.95, german: 0.9, english: 0.85, slavic: 0.75, norse: 0.6, celtic: 0.55, nanyang: 0.8, steppe: 0.35 };
+  P.URBAN = { tarim: 0.95, sogd: 1.25, turk: 0.35, kushan: 1.0, dashi: 1.15, iranislam: 1.15, khitan: 0.6, jurchen: 0.6, mongol: 0.3, xiongnu: 0.3, korea: 1.1, diannan: 0.75, tubo: 0.45, annam: 1.05, siam: 0.9, burma: 0.85, khmer: 0.95, tamil: 1.1, huaxia: 1.25, persia: 1.15, latin: 1.2, greek: 1.15, arabic: 1.05, tianzhu: 1.1, wa: 0.95, german: 0.9, english: 0.85, slavic: 0.75, norse: 0.6, celtic: 0.55, nanyang: 0.8, steppe: 0.35 };
 
   // ---------- 按地理生成城市 ----------
   // 大中小城：先沿河，再平原；规模看周围土地和气候。关隘：山口、峡谷；要塞：山地、丘陵和边境。村镇：随意分布。
@@ -311,6 +311,11 @@
     persia: [['heavyCav', 2.5], ['archer', 2], ['infantry', 2], ['horseArcher', 1], ['elephant', 0.6]],
     nanyang: [['infantry', 3], ['elephant', 1.2], ['archer', 1.5], ['spear', 1]],
     korea: [['archer', 3], ['spear', 2], ['infantry', 2], ['cavalry', 1.5], ['navy', 0.5]],
+    tarim: [['infantry', 3], ['archer', 2], ['cavalry', 1], ['camel', 0.6]], sogd: [['cavalry', 2], ['infantry', 2], ['archer', 1], ['camel', 1]],
+    turk: [['horseArcher', 4], ['cavalry', 3], ['heavyCav', 1]], kushan: [['cavalry', 2], ['infantry', 2], ['elephant', 0.8], ['archer', 1]],
+    dashi: [['camel', 2], ['cavalry', 2.5], ['infantry', 2], ['archer', 1]], iranislam: [['heavyCav', 2], ['horseArcher', 1.5], ['infantry', 2], ['archer', 1.5], ['elephant', 0.3]],
+    khitan: [['heavyCav', 2], ['cavalry', 3], ['horseArcher', 2], ['infantry', 1]], jurchen: [['heavyCav', 3], ['cavalry', 2], ['infantry', 1.5], ['siege', 0.5]],
+    mongol: [['horseArcher', 5], ['cavalry', 2.5], ['heavyCav', 1.5], ['siege', 0.5]], xiongnu: [['horseArcher', 5], ['cavalry', 3]],
     diannan: [['infantry', 3], ['archer', 2], ['crossbow', 1], ['elephant', 0.6], ['militia', 1]],
     tubo: [['heavyCav', 2.5], ['cavalry', 2], ['infantry', 2], ['archer', 1]],
     annam: [['infantry', 3], ['crossbow', 2], ['elephant', 1], ['navy', 1]],
@@ -327,7 +332,7 @@
     celtic: [['infantry', 3], ['spear', 1.5], ['chariot', 1], ['militia', 1]],
     arabic: [['cavalry', 2.5], ['camel', 2], ['infantry', 2], ['archer', 1]],
   };
-  const MARTIAL = { tubo: 1.35, korea: 1.0, diannan: 0.9, steppe: 1.7, norse: 1.3, german: 1.1, latin: 1.1, persia: 1.05, celtic: 1.1, nanyang: 0.85, tianzhu: 0.9 };
+  const MARTIAL = { turk: 1.7, mongol: 1.9, xiongnu: 1.7, jurchen: 1.5, khitan: 1.4, tubo: 1.35, korea: 1.0, diannan: 0.9, steppe: 1.7, norse: 1.3, german: 1.1, latin: 1.1, persia: 1.05, celtic: 1.1, nanyang: 0.85, tianzhu: 0.9 };
   const fmtTroops = (t) => (t >= 1e4 ? (Math.round(t / 5e3) / 2) + '万' : String(Math.max(500, Math.round(t / 100) * 100)));
   const nationCities = (n) => App.S.cities.filter((ct) => { const c = App.Ops.cellAt(ct.x, ct.y); return c >= 0 && App.S.owner[c] === n.id; });
   const ORD2 = ['capital', 'large', 'port', 'fortress', 'medium', 'pass', 'small', 'village'];
