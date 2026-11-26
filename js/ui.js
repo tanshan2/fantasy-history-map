@@ -102,7 +102,7 @@
         break;
       }
       case 'nation': h = nationPick() + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
-      case "prov": h = nationPick() + `<label>行政区 <select data-act="activeProv"><option value="0">— 选择 —</option>${UI.provOptions()}</select></label>` + (o.erase ? chips("provLevel", [{ id: 1, name: "擦省" }, { id: 2, name: "擦道" }, { id: 3, name: "擦府" }]) : "") + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
+      case "prov": h = nationPick() + UI.provPicker() +"" + chips('fill', [{ id: false, name: '笔刷' }, { id: true, name: '油漆桶' }]) + chips('erase', [{ id: false, name: '涂色' }, { id: true, name: '橡皮' }]) + brush(); break;
       case 'line': h = chips('lineStyle', App.LINE_STYLES) + '<span class="hint">按住拖动绘制</span>'; break;
       case 'wall': h = chips('wallType', App.Walls.TYPES) + `<button class="chip lock ${o.wallTowers ? 'on' : ''}" data-lock="wallTowers">敌楼 / 烽燧</button><button class="chip lock ${o.wallRidge ? 'on' : ''}" data-lock="wallRidge">画完询问沿山脊修整</button><button class="chip lock ${o.wallPass ? 'on' : ''}" data-lock="wallPass">穿河过路自动设关</button>` + '<span class="hint">按住拖动画长城，松开后可在「选择」工具里改样式、起名</span>'; break;
       case 'city': h = chips('cityType', App.CITY_TYPES) + '<span class="hint">点击放置，名字按所在国文明自动生成</span>'; break;
@@ -127,7 +127,17 @@
     bar.querySelectorAll('[data-mk]').forEach((i) => (i.onchange = () => (o.makeLand = i.checked)));
     bar.querySelectorAll('[data-str]').forEach((i) => (i.oninput = () => (o[i.dataset.str] = i.value)));
     bar.querySelectorAll('[data-act=activeNation]').forEach((s) => (s.onchange = () => { T().activeNation = +s.value; T().activeProv = 0; UI.refresh(); UI.refreshTool(); }));
-    bar.querySelectorAll('[data-act=activeProv]').forEach((s) => (s.onchange = () => { T().activeProv = +s.value; UI.refresh(); }));
+    bar.querySelectorAll('[data-act=activeProv]').forEach((s) => (s.onchange = () => { T().activeProv = +s.value; UI.refresh(); UI.refreshTool(); }));
+    // 搜索：输入名字（可只输一部分）回车或选中提示即可定位
+    bar.querySelectorAll('[data-act=provSearch]').forEach((i) => (i.onchange = () => {
+      const q = i.value.trim().replace(/（.*$/, ''); if (!q) return;
+      const ps = App.S.provinces.filter((p) => p.nation === T().activeNation && (p.level || 1) === 1);
+      const hit = ps.find((p) => p.name === q) || ps.find((p) => p.name.includes(q));
+      if (!hit) { UI.toast('没有找到「' + q + '」'); return; }
+      T().activeProv = hit.id; UI.refresh(); UI.refreshTool(); UI.toast('已选中 ' + hit.name);
+    }));
+    bar.querySelectorAll('[data-act=provRedivide]').forEach((b) => (b.onclick = () => { let p = App.province(T().activeProv); if (p && (p.level || 1) > 1) p = App.Ops.ancestors(p).find((q) => (q.level || 1) === 1); if (!p) return; App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.autoProvinces(p.nation, 0, Math.random, { keepL1: true, only: p.id }); App.changed({ pol: true, ui: true }); UI.refreshTool(); UI.toast('已重新划分「' + p.name + '」里的下级'); }));
+    bar.querySelectorAll('[data-act=provPick]').forEach((b) => (b.onclick = () => { T().provPick = !T().provPick; UI.refreshTool(); if (T().provPick) UI.toast('在地图上点一下要选的行政区（选最细一级，可再用下拉框往上选）'); }));
     bar.querySelectorAll('[data-act=warTarget]').forEach((s) => (s.onchange = () => { o.warTarget = +s.value; App.R.request(); }));
     $('#stage').dataset.tool = T().cur;
   };
@@ -455,6 +465,24 @@
 // ---- 行政区下拉（按层级缩进）、省/道/府显示切换 ----
 (() => {
   const UI = App.UI;
+  // 行政区工具只编辑一级：下拉框只列一级（外加新占领、未编入上级的），也可以直接在地图上点；
+  // 选中一级后，只针对它里面的二、三级给出操作（二三级跟着一级自动调整，不能手动涂）
+  UI.provPicker = () => {
+    const T = App.Tools, n = App.nation(T.activeNation);
+    if (!n) return '<span class="hint">先选择国家</span>';
+    const esc = U.esc, ps = App.S.provinces.filter((p) => p.nation === n.id);
+    let cur = App.province(T.activeProv);
+    if (cur && (cur.level || 1) > 1) cur = App.Ops.ancestors(cur).find((q) => (q.level || 1) === 1) || cur;
+    const tops = ps.filter((p) => (p.level || 1) === 1 || !ps.some((q) => q.id === p.parent));
+    let h = `<label>${esc(App.levelName(n, 1))}</label><select data-act="activeProv" title="共 ${tops.length} 个"><option value="0">— 在地图上点一下选取 —</option>${tops.map((p) => `<option value="${p.id}" ${cur && p.id === cur.id ? 'selected' : ''}>${esc(p.name)}${(p.level || 1) > 1 ? '（新占领）' : ''}</option>`).join('')}</select>`
+      + `<input type="text" list="provSearchList" data-act="provSearch" placeholder="🔍 搜名字" size="7"><datalist id="provSearchList">${tops.map((p) => `<option value="${esc(p.name)}"></option>`).join('')}</datalist>`
+      + `<button class="chip lock ${T.provPick ? 'on' : ''}" data-act="provPick" title="在地图上点一下直接选中那里的${esc(App.levelName(n, 1))}">🎯 从地图选</button>`;
+    if (cur) {
+      const kids = ps.filter((p) => p.parent === cur.id), k3 = ps.filter((p) => kids.some((k) => k.id === p.parent)).length;
+      h += `<span class="hint">「${esc(cur.name)}」含 ${kids.length} 个${esc(App.levelName(n, 2))}${App.maxLevel(n) > 2 ? '、' + k3 + ' 个' + esc(App.levelName(n, 3)) : ''}，会跟着它的范围自动调整</span><button class="btn small" data-act="provRedivide">重新划分其中的${esc(App.levelName(n, 2))}${App.maxLevel(n) > 2 ? '、' + esc(App.levelName(n, 3)) : ''}</button>`;
+    } else h += '<span class="hint">在地图上点一个' + esc(App.levelName(n, 1)) + '就能直接选中并修改它的范围</span>';
+    return h;
+  };
   UI.provOptions = () => {
     const ps = App.S.provinces.filter((p) => p.nation === App.Tools.activeNation), out = [];
     const walk = (pid, lv) => ps.filter((p) => (p.level || 1) === lv && (lv === 1 || p.parent === pid)).forEach((p) => {
