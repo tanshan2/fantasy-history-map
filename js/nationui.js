@@ -37,7 +37,8 @@
         .map((k) => { const s = pos.get(k.id); return opt(k.id, n.overlord || 0, (s ? '第' + s.place + '名 · ' : '') + (k.name || '（未命名）') + (s ? '（国力 ' + s.power.toFixed(0) + '）' : '')); }).join('');
     })()}</select></div>
       ${n.overlord ? `<div class="field"><label>附庸身份（对宗主的封号）</label><select data-pol="vassalAs">${UI.vassalOpts(r.id === 'fief' ? (n.fiefSys || 'zhou') + ':' + t.tier.id : 'keep')}</select></div>` : ''}
-      <div class="field"><label>建国年份</label><input type="number" data-pol="founded" value="${P.founded(n)}"></div>
+      <div class="field"><label>建国年份${App.S.meta.mainNation === n.id ? '　<b class="gold">★ 主国</b>' : ''}</label><input type="number" data-pol="founded" value="${P.founded(n)}"></div>
+      <div class="row wrap">${App.S.meta.mainNation === n.id ? '<span class="hint">改这里的年份，其他国家的建国年会自动跟着调整（相差不超过 300 年）</span>' : '<button class="btn small" data-pol-act="main" title="以这个国家的建国年为准，其他国家调整到前后 300 年以内">★ 设为主国，按它调整其他国家建国年</button>'}</div>
       <div class="row wrap"><button class="btn small" data-pol-act="rename" title="保留国名主体，换成「${esc(t.suf)}」等称号">按国体改名</button></div>`;
     return h;
   };
@@ -45,7 +46,7 @@
   UI.bindPolityFields = (root, n, after) => {
     root.querySelectorAll('[data-pol]').forEach((el) => (el.onchange = () => {
       App.pushUndo(); const k = el.dataset.pol;
-      if (k === 'founded') n.founded = Math.round(+el.value || 0);
+      if (k === 'founded') { n.founded = Math.round(+el.value || 0); if (App.S.meta.mainNation === n.id && App.Polity.alignFounding) { const c = App.Polity.alignFounding(n.id); UI.toast('主国建国年改为 ' + n.founded + '，已调整 ' + c + ' 个国家的建国年（前后 300 年以内）'); } }
       else if (k === 'overlord') n.overlord = +el.value || 0;
       else if (k === 'fiefSys') { n.fiefSys = el.value; n.fiefTitle = App.FIEF_SYS[el.value].tiers[0].id; }
       else if (k === 'vassalAs') { if (el.value === 'keep') { if (n.rank === 'fief') n.rank = P.guessRank(n) === 'fief' ? 'kingdom' : P.guessRank(n); } else { const [s, ti] = el.value.split(':'); n.rank = 'fief'; n.fiefSys = s; n.fiefTitle = ti; } }
@@ -58,6 +59,7 @@
       if (['rank', 'fiefSys', 'fiefTitle', 'vassalAs'].includes(k)) { const f = P.dynasty(n); if (f) { f.house = P.title(n).house; P.crown(n, f); } }
       App.changed({ pol: k === 'overlord', ui: true }); after && after();
     }));
+    root.querySelectorAll('[data-pol-act=main]').forEach((b) => (b.onclick = () => { App.pushUndo(); const c = App.Polity.alignFounding(n.id); App.changed({ ui: true }); UI.toast('「' + n.name + '」设为主国（建国 ' + App.Polity.founded(n) + ' 年），已调整 ' + c + ' 个国家的建国年'); after && after(); }));
     root.querySelectorAll('[data-pol-act=rename]').forEach((b) => (b.onclick = () => { App.pushUndo(); P.renameByRank(n); App.changed({ ui: true }); UI.refreshTool && UI.refreshTool(); after && after(); }));
   };
 
