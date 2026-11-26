@@ -280,11 +280,22 @@
     UI.toast(`参照真实历史：${res.hist} 个（${res.names.slice(0, 6).join('、')}${res.names.length > 6 ? '…' : ''}）` + (res.gen ? `；历史上没有的土地新生成 ${res.gen} 个` : ''));
   };
 })();
-// 打开旧地图时：有国家的领土对得上真实区划、但行政区是旧算法生成的，提示一次
-window.addEventListener('load', () => setTimeout(() => {
-  try {
-    const UI = App.UI, S = App.S; if (!S.meta.geo) return;
-    const hit = S.nations.find((n) => n.histAdmin !== false && S.provinces.some((p) => p.nation === n.id) && !S.provinces.some((p) => p.nation === n.id && p.hist) && UI.histMatches(n).length);
-    if (hit) { const msg = `「${hit.name}」的领土对应真实的历史区划，可在「国家」页或国家档案（I）里点按钮按真实历史重新划分`; UI.toast(msg); setTimeout(() => UI.toast(msg), 2400); setTimeout(() => UI.toast(msg), 4800); }
-  } catch (e) { console.warn(e); }
-}, 2500));
+// 打开地图时：有国家的领土对得上真实区划、但行政区是旧算法生成的 → 直接弹窗，一键换成真实区划
+App.UI.histCheck = (force) => {
+  const UI = App.UI, S = App.S; if (!S.meta.geo || (S.meta.histDismiss && !force)) return false;
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const list = S.nations.filter((n) => n.histAdmin !== false && S.provinces.some((p) => p.nation === n.id) && !S.provinces.some((p) => p.nation === n.id && p.hist))
+    .map((n) => ({ n, ms: UI.histMatches(n) })).filter((x) => x.ms.length).slice(0, 4);
+  if (!list.length) return false;
+  UI.modal(`<h3>换成真实的历史区划？</h3>
+    <p>下面的国家占的是真实地图上的历史疆域，但现在的行政区是旧版算法随意生成的（名称、位置都不对应真实历史）。点一个朝代，就按该朝的真实区划重新划分：领土覆盖到的地方沿用真实的省 / 路 / 道和下辖府州，超出该朝疆域的土地再按地理新生成。可用 ⌘Z 撤销。</p>
+    ${list.map(({ n, ms }) => `<div class="pcard"><h4>${esc(n.name)}</h4><div class="row wrap">${ms.slice(0, 4).map((m) => `<button class="btn${m === ms[0] ? ' pri' : ''}" data-hn="${n.id}" data-hk="${m.key}" title="${esc(m.names.join('、'))}">${esc(App.ADMIN_SYS[m.key].name.split('：')[0])}（对上 ${m.count} 个）</button>`).join('')}</div></div>`).join('')}
+    <div class="row wrap"><button class="btn" data-hno>保留现在的行政区</button></div>`, (m) => {
+    m.querySelectorAll('[data-hk]').forEach((b) => (b.onclick = () => {
+      const n = App.nation(+b.dataset.hn); UI.histGo(n, b.dataset.hk); b.closest('.pcard').innerHTML = `<h4>${esc(n.name)}</h4><p>✓ 已按真实历史重新划分</p>`;
+    }));
+    m.querySelector('[data-hno]').onclick = () => { S.meta.histDismiss = true; App.autosave(); m.hidden = true; UI.toast('以后可以在国家档案（I）的「行政区划」里随时换成真实区划'); };
+  });
+  return true;
+};
+window.addEventListener('load', () => setTimeout(() => { try { App.UI.histCheck(); } catch (e) { console.warn(e); } }, 1500));
