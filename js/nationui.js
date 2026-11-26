@@ -204,7 +204,8 @@
       m.querySelectorAll('[data-padd]').forEach((b) => (b.onclick = () => { const par = App.province(+b.dataset.padd); App.pushUndo(); const p = App.Ops.addProvince(n.id, null, par ? (par.level || 1) + 1 : 1, par ? par.id : 0); if (par) UI.profOpen[par.id] = true; T().activeNation = n.id; T().activeProv = p.id; UI.toast(`已新增「${p.name}」，点 ✎ 到地图上涂出它的范围`); done(); }));
       m.querySelectorAll('[data-ppaint]').forEach((b) => (b.onclick = () => { m.hidden = true; T().activeNation = n.id; T().activeProv = +b.dataset.ppaint; T().set('prov'); UI.refresh(); UI.refreshTool(); UI.toast('用行政区画笔在地图上涂色，完成后按 I 回到国家档案'); }));
       m.querySelector('[data-pauto]').onclick = () => { const k = +m.querySelector('[data-pk]').value || 0; App.pushUndo(['prov', 'prov2', 'prov3']); UI.histToast(App.Ops.autoProvinces(n.id, k)); done({ pol: true }); };
-      const ph = m.querySelector('[data-phist]'); if (ph) ph.onchange = () => { n.histAdmin = ph.checked; App.autosave(); };
+      const ph = m.querySelector('[data-phist]'); if (ph) ph.onchange = () => { n.histAdmin = ph.checked; App.autosave(); again(); };
+      UI.bindHistGo(m, n, () => again());
       m.querySelector('[data-psub]').onclick = () => { App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.autoProvinces(n.id, 0, Math.random, { keepL1: true }); done({ pol: true }); };
       // 城市
       m.querySelectorAll('[data-cdel]').forEach((b) => (b.onclick = () => { App.pushUndo(); S.cities = S.cities.filter((c) => c.id !== +b.dataset.cdel); done(); }));
@@ -247,10 +248,43 @@
     if (style) h += `<p class="muted">🗺 ${esc(style)}</p>`;
     if (real && App.S.meta.geo === real.geo)
       h += `<label class="ck"><input type="checkbox" ${attr} ${n.histAdmin !== false ? 'checked' : ''}> 先参照真实历史区划：领土覆盖到的真实${esc(App.levelName(n, 1))}沿用真实名称、治所和下辖单位，历史上没有的土地再新生成</label>`;
+    // 已有地图：领土对得上真实区划，但现有行政区是旧算法生成的 → 提示一键换成真实区划
+    const ms = UI.histMatches(n);
+    const l1 = App.S.provinces.filter((p) => p.nation === n.id && (p.level || 1) === 1), stale = l1.length && !l1.some((p) => p.hist);
+    if (ms.length && n.histAdmin !== false && (stale || !l1.length || ms[0].key !== key)) {
+      const cur = ms.find((m) => m.key === key);
+      h += `<div class="pcard" style="border-color:#c9a45c"><p>📍 这片领土对应真实的历史区划：</p><div class="row wrap">` +
+        ms.slice(0, 4).map((m) => `<button class="btn small${m.key === key ? ' pri' : ''}" data-histgo="${m.key}" title="${esc(m.names.join('、'))}">${esc(App.ADMIN_SYS[m.key].name.split('：')[0])}（对上 ${m.count} 个）</button>`).join('') +
+        `</div><p class="muted">${cur && stale ? '现在的行政区是旧算法生成的名称，' : ''}点按钮即按真实历史重新划分（会替换本国现有行政区，可撤销）。</p></div>`;
+    }
     return h;
   };
+  // 各个有真实数据的制度，在这个国家领土上能对上几个真实一级区
+  UI.histMatches = (n) => {
+    if (!App.ADMIN_REAL || !App.S.meta.geo) return [];
+    return Object.keys(App.ADMIN_REAL).filter((k) => App.ADMIN_REAL[k].geo === App.S.meta.geo).map((k) => {
+      const p = App.Ops.histPlan({ id: n.id, culture: n.culture, adminSys: k }); return p ? { key: k, count: p.units.length, names: p.units.map((u) => u.name) } : null;
+    }).filter((m) => m && m.count >= 2).sort((a, b) => (b.key === App.sysKey(n)) - (a.key === App.sysKey(n)) || b.count - a.count);
+  };
+  // 切换到该制度并按真实历史重新划分
+  UI.histGo = (n, key) => {
+    App.pushUndo(['prov', 'prov2', 'prov3']);
+    if (App.sysKey(n) !== key) n.adminSys = key;
+    n.histAdmin = true;
+    UI.histToast(App.Ops.autoProvinces(n.id, 0));
+    App.changed({ pol: true, ui: true });
+  };
+  UI.bindHistGo = (root, n, after) => root.querySelectorAll('[data-histgo]').forEach((b) => (b.onclick = () => { UI.histGo(n, b.dataset.histgo); if (after) after(); }));
   UI.histToast = (res) => {
     if (!res || !res.hist) return;
     UI.toast(`参照真实历史：${res.hist} 个（${res.names.slice(0, 6).join('、')}${res.names.length > 6 ? '…' : ''}）` + (res.gen ? `；历史上没有的土地新生成 ${res.gen} 个` : ''));
   };
 })();
+// 打开旧地图时：有国家的领土对得上真实区划、但行政区是旧算法生成的，提示一次
+window.addEventListener('load', () => setTimeout(() => {
+  try {
+    const UI = App.UI, S = App.S; if (!S.meta.geo) return;
+    const hit = S.nations.find((n) => n.histAdmin !== false && S.provinces.some((p) => p.nation === n.id) && !S.provinces.some((p) => p.nation === n.id && p.hist) && UI.histMatches(n).length);
+    if (hit) { const msg = `「${hit.name}」的领土对应真实的历史区划，可在「国家」页或国家档案（I）里点按钮按真实历史重新划分`; UI.toast(msg); setTimeout(() => UI.toast(msg), 2400); setTimeout(() => UI.toast(msg), 4800); }
+  } catch (e) { console.warn(e); }
+}, 2500));
