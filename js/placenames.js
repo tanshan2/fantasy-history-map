@@ -172,8 +172,25 @@
     else base = cityZh(ctx, r);
     return { name: base + form, base };
   };
+  // 真实地理上新生成的区不用真实区划的名字（如在西南生成「福建省」「江南省」会误导），只在真实地图模板上生效
+  let BAN = null, BANKEY = '';
+  const SUFX = /(行省|布政使司|直隶|都司|省|路|道|府|州|郡|国|军|监|司|卫|牧|尹)$/;
+  const banned = (name) => {
+    const geo = App.S.meta.geo; if (!geo || !App.ADMIN_REAL) return false;
+    if (BANKEY !== geo) {
+      BAN = new Set(); BANKEY = geo;
+      Object.values(App.ADMIN_REAL).filter((d) => d.geo === geo).forEach((d) => d.l1.forEach(([nm, kids]) => {
+        BAN.add(nm); BAN.add(nm.replace(SUFX, '')); BAN.add(Array.from(nm).slice(0, 2).join(''));
+        kids.forEach(([k]) => { BAN.add(k); BAN.add(k.replace(SUFX, '')); });
+      }));
+    }
+    // 明确指代某个真实省份的字（福建的福、广东的广、湖南的湘…）放在别处会误导
+    if (/[闽粤桂滇黔蜀湘鄂赣浙皖鲁豫冀晋陕甘琼渝夔梓韶邕福广]/.test(name.replace(SUFX, ''))) return true;
+    let b = name; for (let i = 0; i < 2; i++) { if (BAN.has(b)) return true; b = b.replace(SUFX, ''); }
+    return BAN.has(b);
+  };
   NM.provFor = (n, level, r = Math.random, ctx, used, nc) => {
-    const u = used || PN.used('prov');
+    const u0 = used || PN.used('prov'), u = { has: (x) => u0.has(x) || banned(x) };
     return uniq(() => (n && n.culture === 'huaxia' && ctx ? provZh(n, level, ctx, r, nc) : null) || (ctx ? provOther(n, level, ctx, r) : origProvFor(n, level, r)), u);
   };
   const provOther = (n, level, ctx, r) => {
