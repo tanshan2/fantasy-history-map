@@ -114,7 +114,7 @@
     const provRow = (p) => {
       const ks = kids(p.id), open = UI.profOpen[p.id];
       return `<div class="erow lv${p.level || 1}">${ks.length ? `<button class="x tog" data-ptog="${p.id}">${open ? '▾' : '▸'}</button>` : '<span class="x"></span>'}
-        ${E('prov', p.id, 'name', p.name)}<small>${ks.length ? ks.length + ' 个' + esc(App.levelName(n, (p.level || 1) + 1)) : ''}</small>
+        ${E('prov', p.id, 'name', p.name)}<small>${App.Pop ? '人口 ' + App.Pop.str(App.Pop.prov(p.id)) + (App.Pop.basis(p.id) ? '（史载）' : '') + (ks.length ? ' · ' : '') : ''}${ks.length ? ks.length + ' 个' + esc(App.levelName(n, (p.level || 1) + 1)) : ''}</small>
         <button class="x" data-prnd="${p.id}" title="随机改名">🎲</button>${(p.level || 1) < sys.levels ? `<button class="x" data-padd="${p.id}" title="下设${esc(App.levelName(n, (p.level || 1) + 1))}">＋</button>` : ''}<button class="x" data-ppaint="${p.id}" title="到地图上涂这个区">✎</button><button class="x del" data-pdel="${p.id}" title="删除（含下级）">×</button></div>
         ${open ? `<div class="esub">${ks.map(provRow).join('')}</div>` : ''}`;
     };
@@ -130,6 +130,7 @@
         <datalist id="relListP">${App.Names.RELIGIONS.map((r) => `<option>${esc(r)}</option>`).join('')}</datalist>
         ${kv('总面积', `${P.areaStr(st.area)}<small>（${st.cells} 格${comps.length > 1 ? ' · ' + (comps.length - 1) + ' 块飞地' : ''}）</small>`)}
         ${kv('有效领土', `${P.areaStr(st.good)}<small>（良田率 ${q}%${st.river ? ' · 沿河 ' + P.areaStr(st.river) : ''}）</small>`)}
+        ${App.Pop ? kv('人口', `约 ${App.Pop.str(App.Pop.nation(n.id))}<small>（每平方公里 ${(App.Pop.nation(n.id) / Math.max(1, st.area)).toFixed(1)} 人）</small>`) + `<p class="muted" style="margin:2px 0 6px">👥 ${esc(App.Pop.note(App.sysKey(n)))}按地理分到各省府县：平原河谷、沿河沿海人多，山地沙漠人少${App.POP_HIST[App.sysKey(n)]?.units ? '；真实的省直接用当年该省的户口数' : ''}。</p>` : ''}
         ${terr ? kv('地貌', `<small>${terr}</small>`) : ''}
         ${kv('国力', st.power != null ? `第 ${st.place} 名 · ${st.power.toFixed(1)} 分<small>（土地 ${st.gScore.toFixed(0)} · 城市 ${st.cScore.toFixed(0)} · 军力 ${st.mScore.toFixed(0)}）</small>` : '—')}
       </div>
