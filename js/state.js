@@ -75,6 +75,7 @@ App.deserialize = (o) => {
   if (o.prov2) s.prov2 = unrle(o.prov2, Uint32Array); if (o.climate) s.climate = unrle(o.climate, Uint8Array); if (o.prov3) s.prov3 = unrle(o.prov3, Uint32Array);
   s.provinces.forEach((p) => (p.level = p.level || 1));
   App.repairIds(s);
+  try { App.inferGeo(s); } catch (e) { console.warn(e); }
   if (!s.meta.zhNames && App.Translit) { App.Translit.migrate(s); s.meta.zhNames = true; }
   App.S = s; App.undoStack.length = 0; App.redoStack.length = 0;
   // 旧版留下的空名行政区：补上名字
@@ -138,4 +139,29 @@ App.repairIds = (s) => {
 App.repairOk = (s, id, owner, level) => {
   if (!App._rp || App._rp.s !== s) App._rp = { s, m: new Map(s.provinces.map((p) => [p.id, p])) };
   const p = App._rp.m.get(id); return !!p && p.nation === owner && (p.level || 1) === level;
+};
+
+// ---- 旧存档缺少「地理模板」标记时，按地形自动识别是不是真实的亚洲 / 欧洲地图 ----
+// 比对一批确定在陆地、确定在海上的地点；九成以上对得上，就认定是该模板（这样才能参照真实历史区划、算人口）
+App.GEO_PROBES = {
+  asia: { land: [[116.4, 39.9], [104.1, 30.7], [77.2, 28.6], [51.4, 35.7], [90, 31], [102, 47], [127, 37.5], [138.5, 36.2], [83, 40], [69, 41], [113, 28], [100, 15]],
+    sea: [[125, 30], [88, 15], [113, 15], [64, 15], [135, 25], [150, 40], [120, 5], [160, 20]] },
+  europe: { land: [[2.35, 48.85], [13.4, 52.5], [37.6, 55.7], [-3.7, 40.4], [12.5, 42.8], [30.5, 50.4], [21, 52.2], [16.4, 48.2], [35, 39], [10, 62]],
+    sea: [[-20, 45], [5, 39], [18, 34], [3, 56], [-10, 48], [33, 43], [20, 58]] },
+};
+App.inferGeo = (s) => {
+  if (s.meta.geo || !App.Templates || !App.Templates.PROJ) return s.meta.geo || null;
+  const W = App.W, H = App.H, land = (lon, lat, pj) => {
+    const [fx, fy] = pj.fwd(lon, lat), x = Math.floor(fx), y = Math.floor(fy); if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) return null;
+    let k = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (s.terrain[(y + dy) * W + x + dx] >= 2) k++;
+    return k >= 5;
+  };
+  for (const [g, P] of Object.entries(App.GEO_PROBES)) {
+    const pj = App.Templates.PROJ[g]; if (!pj) continue;
+    let ok = 0, tot = 0;
+    P.land.forEach(([lo, la]) => { const v = land(lo, la, pj); if (v === null) return; tot++; if (v) ok++; });
+    P.sea.forEach(([lo, la]) => { const v = land(lo, la, pj); if (v === null) return; tot++; if (!v) ok++; });
+    if (tot >= 12 && ok / tot >= 0.9) { s.meta.geo = g; return g; }
+  }
+  return null;
 };
