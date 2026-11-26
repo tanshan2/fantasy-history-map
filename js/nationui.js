@@ -135,6 +135,7 @@
       </div>
       <div class="pcard"><h4>行政区划</h4>
         <div class="field"><label>制度</label><select data-sys>${UI.sysOptions(n)}</select></div>
+        ${UI.adminBasis(n, 'data-phist')}
         <p class="muted">${[1, 2, 3].slice(0, sys.levels).map((lv) => `${lvCn[lv]}级${esc(App.levelName(n, lv))} ${st.prov[lv]} 个`).join(' · ')}</p>
         <div class="elist">${l1.length ? l1.map(provRow).join('') : '<p class="muted">还没有行政区。</p>'}</div>
         <div class="row wrap"><button class="btn small" data-padd="0">＋ 新增${esc(App.levelName(n, 1))}</button>
@@ -202,7 +203,8 @@
       m.querySelectorAll('[data-pdel]').forEach((b) => (b.onclick = () => { const p = App.province(+b.dataset.pdel); if (kids(p.id).length && !confirm(`删除「${p.name}」及其全部下级？`)) return; App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.deleteProvince(p.id); done({ pol: true }); }));
       m.querySelectorAll('[data-padd]').forEach((b) => (b.onclick = () => { const par = App.province(+b.dataset.padd); App.pushUndo(); const p = App.Ops.addProvince(n.id, null, par ? (par.level || 1) + 1 : 1, par ? par.id : 0); if (par) UI.profOpen[par.id] = true; T().activeNation = n.id; T().activeProv = p.id; UI.toast(`已新增「${p.name}」，点 ✎ 到地图上涂出它的范围`); done(); }));
       m.querySelectorAll('[data-ppaint]').forEach((b) => (b.onclick = () => { m.hidden = true; T().activeNation = n.id; T().activeProv = +b.dataset.ppaint; T().set('prov'); UI.refresh(); UI.refreshTool(); UI.toast('用行政区画笔在地图上涂色，完成后按 I 回到国家档案'); }));
-      m.querySelector('[data-pauto]').onclick = () => { const k = +m.querySelector('[data-pk]').value || 0; App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.autoProvinces(n.id, k); done({ pol: true }); };
+      m.querySelector('[data-pauto]').onclick = () => { const k = +m.querySelector('[data-pk]').value || 0; App.pushUndo(['prov', 'prov2', 'prov3']); UI.histToast(App.Ops.autoProvinces(n.id, k)); done({ pol: true }); };
+      const ph = m.querySelector('[data-phist]'); if (ph) ph.onchange = () => { n.histAdmin = ph.checked; App.autosave(); };
       m.querySelector('[data-psub]').onclick = () => { App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.autoProvinces(n.id, 0, Math.random, { keepL1: true }); done({ pol: true }); };
       // 城市
       m.querySelectorAll('[data-cdel]').forEach((b) => (b.onclick = () => { App.pushUndo(); S.cities = S.cities.filter((c) => c.id !== +b.dataset.cdel); done(); }));
@@ -231,4 +233,24 @@
   };
   // 当前国家：高亮的 > 正在编辑的
   UI.profileCurrent = () => UI.profile(T().hl || T().activeNation || (App.S.nations[0] && App.S.nations[0].id));
+})();
+
+// ---- 行政区划的历史依据说明、「参照真实历史区划」开关、划分结果提示 ----
+(() => {
+  const UI = App.UI, esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  UI.adminBasis = (n, attr) => {
+    if (!n) return '';
+    const key = App.sysKey(n), real = App.ADMIN_REAL && App.ADMIN_REAL[key];
+    const hist = App.histNote ? App.histNote(key) : '', style = App.adminStyleNote ? App.adminStyleNote(n) : '';
+    let h = '';
+    if (hist) h += `<p class="muted">📜 ${esc(hist)}</p>`;
+    if (style) h += `<p class="muted">🗺 ${esc(style)}</p>`;
+    if (real && App.S.meta.geo === real.geo)
+      h += `<label class="ck"><input type="checkbox" ${attr} ${n.histAdmin !== false ? 'checked' : ''}> 先参照真实历史区划：领土覆盖到的真实${esc(App.levelName(n, 1))}沿用真实名称、治所和下辖单位，历史上没有的土地再新生成</label>`;
+    return h;
+  };
+  UI.histToast = (res) => {
+    if (!res || !res.hist) return;
+    UI.toast(`参照真实历史：${res.hist} 个（${res.names.slice(0, 6).join('、')}${res.names.length > 6 ? '…' : ''}）` + (res.gen ? `；历史上没有的土地新生成 ${res.gen} 个` : ''));
+  };
 })();
