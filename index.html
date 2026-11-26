@@ -7,13 +7,14 @@
 <meta name="description" content="在浏览器里绘制架空历史地图：大陆、河流、地貌、森林、国家、行政区、城市、军队。">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English&family=Alegreya:wght@700;800&family=Noto+Sans+SC:wght@400;600&family=Noto+Serif+SC:wght@400;600;700;900&family=Ma+Shan+Zheng&display=swap">
-<link rel="stylesheet" href="css/style.css?v=75">
+<link rel="stylesheet" href="css/style.css?v=76">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%233e5f8a'/><path d='M6 22c3-9 8-12 13-10s6-3 8 0c0 8-6 13-12 13S7 26 6 22z' fill='%23e9dcbf' stroke='%231d3a63' stroke-width='1.5'/><path d='M14 14l4 3-3 5' fill='none' stroke='%23b8231a' stroke-width='1.6'/></svg>">
 </head>
 <body>
 <header id="topbar">
-  <div class="brand"><span class="seal">图</span><div><b>架空史图志</b><small>历史地图工坊 · <span style="color:var(--gold)">v75 新版</span></small></div></div>
+  <div class="brand"><span class="seal">图</span><div><b>架空史图志</b><small>历史地图工坊 · <span style="color:var(--gold)">v76 新版</span></small></div></div>
   <input id="mapName" type="text" spellcheck="false" title="地图名称">
+  <label class="yearBox" title="地图上「现在」是哪一年（负数为公元前）。改了以后，各国建国年会自动检查：有主国时在主国前后 300 年内，且不晚于这一年">现在 <input id="mapYear" type="number" step="1"> 年</label>
   <div class="tb">
     <button class="btn" id="btnNew">新建</button>
     <button class="btn" id="btnOpen">打开</button>
@@ -53,36 +54,36 @@
 <input type="file" id="fileJson" accept=".json,application/json" hidden>
 <input type="file" id="fileImg" accept="image/*" hidden>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-<script src="js/util.js?v=75"></script>
-<script src="js/state.js?v=75"></script>
-<script src="js/geometry.js?v=75"></script>
-<script src="js/sprites.js?v=75"></script>
-<script src="js/sprites2.js?v=75"></script>
-<script src="js/names.js?v=75"></script>
-<script src="js/translit.js?v=75"></script>
-<script src="js/climate.js?v=75"></script>
-<script src="js/render.js?v=75"></script>
-<script src="js/ops.js?v=75"></script>
-<script src="js/admin.js?v=75"></script>
-<script src="js/cultures2.js?v=75"></script>
-<script src="js/cultures3.js?v=75"></script>
-<script src="js/adminstyle.js?v=75"></script>
-<script src="js/admindata.js?v=75"></script>
-<script src="js/population.js?v=75"></script>
-<script src="js/polity.js?v=75"></script>
-<script src="js/placenames.js?v=75"></script>
-<script src="js/tools.js?v=75"></script>
-<script src="js/walls.js?v=75"></script>
-<script src="js/war.js?v=75"></script>
-<script src="js/fillblank.js?v=75"></script>
-<script src="js/refine.js?v=75"></script>
-<script src="js/generate.js?v=75"></script>
-<script src="js/preset.js?v=75"></script>
-<script src="js/templates.js?v=75"></script>
-<script src="js/ui.js?v=75"></script>
-<script src="js/nationui.js?v=75"></script>
-<script src="js/multisel.js?v=75"></script>
-<script src="js/family.js?v=75"></script>
-<script src="js/main.js?v=75"></script>
+<script src="js/util.js?v=76"></script>
+<script src="js/state.js?v=76"></script>
+<script src="js/geometry.js?v=76"></script>
+<script src="js/sprites.js?v=76"></script>
+<script src="js/sprites2.js?v=76"></script>
+<script src="js/names.js?v=76"></script>
+<script src="js/translit.js?v=76"></script>
+<script src="js/climate.js?v=76"></script>
+<script src="js/render.js?v=76"></script>
+<script src="js/ops.js?v=76"></script>
+<script src="js/admin.js?v=76"></script>
+<script src="js/cultures2.js?v=76"></script>
+<script src="js/cultures3.js?v=76"></script>
+<script src="js/adminstyle.js?v=76"></script>
+<script src="js/admindata.js?v=76"></script>
+<script src="js/population.js?v=76"></script>
+<script src="js/polity.js?v=76"></script>
+<script src="js/placenames.js?v=76"></script>
+<script src="js/tools.js?v=76"></script>
+<script src="js/walls.js?v=76"></script>
+<script src="js/war.js?v=76"></script>
+<script src="js/fillblank.js?v=76"></script>
+<script src="js/refine.js?v=76"></script>
+<script src="js/generate.js?v=76"></script>
+<script src="js/preset.js?v=76"></script>
+<script src="js/templates.js?v=76"></script>
+<script src="js/ui.js?v=76"></script>
+<script src="js/nationui.js?v=76"></script>
+<script src="js/multisel.js?v=76"></script>
+<script src="js/family.js?v=76"></script>
+<script src="js/main.js?v=76"></script>
 </body>
 </html>
