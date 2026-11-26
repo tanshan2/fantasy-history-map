@@ -72,7 +72,7 @@
         const n = App.nation(S.owner[c]), p = App.province(S.prov[c]);
         const f = S.forest[c] ? App.FORESTS.find((k) => k.id === S.forest[c])?.name : '';
         const cl = App.Climate.at(c);
-        s += ` · ${tn}${cl && t >= 2 ? ' · ' + cl.name + '气候' : ''}${f ? ' · ' + f : ''}${n ? ' · ' + n.name : ''}${p ? ' · ' + p.name : ''}`;
+        s += ` · ${tn}${cl && t >= 2 ? ' · ' + cl.name + '气候' : ''}${f ? ' · ' + f : ''}${n ? ' · ' + n.name : ''}${p ? ' · ' + p.name : ''}${App.Pop && p && App.Pop.provSoft(p.id) ? '（人口约 ' + App.Pop.str(App.Pop.provSoft(p.id)) + '）' : ''}${App.Pop && S.prov2[c] && App.province(S.prov2[c]) && App.Pop.provSoft(S.prov2[c]) ? ' · ' + App.province(S.prov2[c]).name + '（' + App.Pop.str(App.Pop.provSoft(S.prov2[c])) + '）' : ''}`;
       }
     }
     $('#status').textContent = s;
@@ -189,7 +189,7 @@
     const row = (p) => {
       const lv = p.level || 1, open = UI.provOpen?.[p.id];
       const sub = lv < 3 ? kids(p.id, lv + 1) : [];
-      return `<li class="lv${lv} ${p.id === T().activeProv ? 'on' : ''}" data-prov="${p.id}"><em data-ptog="${p.id}">${sub.length ? (open ? '▾' : '▸') : '·'}</em><span>${U.esc(p.name)}</span><small>${App.levelName(an, lv)}${sub.length ? ' · ' + sub.length : ''}</small></li>` + (open ? sub.map(row).join('') : '');
+      return `<li class="lv${lv} ${p.id === T().activeProv ? 'on' : ''}" data-prov="${p.id}"><em data-ptog="${p.id}">${sub.length ? (open ? '▾' : '▸') : '·'}</em><span>${U.esc(p.name)}</span><small>${App.levelName(an, lv)}${sub.length ? ' · ' + sub.length : ''}${App.Pop ? ' · ' + App.Pop.str(App.Pop.prov(p.id)) + '人' : ''}</small></li>` + (open ? sub.map(row).join('') : '');
     };
     let h = `<div class="row"><b style="color:${an.color}">■</b>&nbsp;${U.esc(an.name)} 的行政区</div>
       <div class="row wrap"><button class="btn pri" data-act="addProv">＋ 新建${App.levelName(an, 1)}</button></div><p class="muted">制度：${App.sysOf(an).name}（在「国家」页修改）</p><div></div>`;
@@ -201,6 +201,7 @@
       const lv = ap.level || 1, par = App.province(ap.parent);
       h += `<div class="card"><h4>编辑${App.levelName(an, lv)}（${["", "一", "二", "三"][lv]}级）</h4>${par ? `<p class="muted">隶属：${U.esc(par.name)}</p>` : ''}
       ${field('名称', `<div class="row"><input type="text" data-p="name" value="${U.esc(ap.name)}"><button class="btn" data-act="rndProv">🎲</button></div>`)}
+      ${App.Pop ? `<p class="muted">人口约 ${App.Pop.str(App.Pop.prov(ap.id))}${App.Pop.basis(ap.id) ? `（史载 ${App.Pop.str(App.Pop.basis(ap.id).rec)}${App.Pop.basis(ap.id).cover < 1 ? '，本国占其中 ' + Math.round(App.Pop.basis(ap.id).cover * 100) + '%' : ''}）` : '（按地理推算）'}</p>` : ''}
       <div class="row wrap">${lv < App.maxLevel(an) ? `<button class="btn pri" data-act="addSub">＋ 下设${App.levelName(an, lv + 1)}</button>` : ""}<button class="btn danger" data-act="delProv">删除（含下级）</button></div></div>`;
     }
     return h;
