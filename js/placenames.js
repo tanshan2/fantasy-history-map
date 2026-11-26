@@ -175,23 +175,38 @@
   // 真实地理上新生成的区不用真实区划的名字（如在西南生成「福建省」「江南省」会误导），只在真实地图模板上生效
   let BAN = null, BANKEY = '';
   const SUFX = /(行省|布政使司|直隶|都司|省|路|道|府|州|郡|国|军|监|司|卫|牧|尹)$/;
-  const banned = (name) => {
+  // 地名用字 → 它在真实地图上的位置（汾＝汾州、魏＝魏州…），新生成的名字只许用附近（约 5 度内）真实地名的字
+  let CHARLOC = null;
+  const banned = (name, ctx) => {
     const geo = App.S.meta.geo; if (!geo || !App.ADMIN_REAL) return false;
     if (BANKEY !== geo) {
-      BAN = new Set(); BANKEY = geo;
+      BAN = new Set(); BANKEY = geo; CHARLOC = new Map();
+      const loc = (ch, lo, la) => { if (!CHARLOC.has(ch)) CHARLOC.set(ch, []); CHARLOC.get(ch).push([lo, la]); };
       Object.values(App.ADMIN_REAL).filter((d) => d.geo === geo).forEach((d) => d.l1.forEach(([nm, kids]) => {
         BAN.add(nm); BAN.add(nm.replace(SUFX, '')); BAN.add(Array.from(nm).slice(0, 2).join(''));
-        kids.forEach(([k]) => { BAN.add(k); BAN.add(k.replace(SUFX, '')); });
+        const [, slo, sla] = kids[0]; Array.from(nm.replace(SUFX, '')).forEach((ch) => loc(ch, slo, sla));
+        kids.forEach(([k, lo, la]) => { BAN.add(k); BAN.add(k.replace(SUFX, '')); Array.from(k.replace(SUFX, '')).slice(0, 1).forEach((ch) => loc(ch, lo, la)); });
       }));
+      // 方位、地形这类通用字不算指代
+      '东西南北中上下左右前后内外新大小山河江海湖川原平阳阴水口关岭'.split('').forEach((ch) => CHARLOC.delete(ch));
     }
-    // 明确指代某个真实省份的字（福建的福、广东的广、湖南的湘…）放在别处会误导
-    if (/[闽粤桂滇黔蜀湘鄂赣浙皖鲁豫冀晋陕甘琼渝夔梓韶邕福广]/.test(name.replace(SUFX, ''))) return true;
     let b = name; for (let i = 0; i < 2; i++) { if (BAN.has(b)) return true; b = b.replace(SUFX, ''); }
-    return BAN.has(b);
+    if (BAN.has(b)) return true;
+    // 含有真实一级区的名字（「新河北」「上江南」）也不行
+    if (!L1P || L1PKEY !== geo) { L1PKEY = geo; L1P = [...new Set(Object.values(App.ADMIN_REAL).filter((d) => d.geo === geo).flatMap((d) => d.l1.map(([nm]) => Array.from(nm.replace(SUFX, '')).slice(0, 2).join(''))))].filter((s) => s.length === 2); }
+    if (L1P.some((s) => b.includes(s))) return true;
+    const ll = ctx && ctx.ll; if (!ll || ll.lon == null) return false;
+    // 名字里的字若是某个真实地名的专用字，而那个地方离这里很远（如蒙古出现「汾北」、西南出现「福广」），就不用
+    return Array.from(b).some((ch) => { const L = CHARLOC.get(ch); return L && !L.some(([lo, la]) => Math.hypot(lo - ll.lon, la - ll.lat) < 5); });
   };
+  let L1P = null, L1PKEY = '';
   NM.provFor = (n, level, r = Math.random, ctx, used, nc) => {
-    const u0 = used || PN.used('prov'), u = { has: (x) => u0.has(x) || banned(x) };
-    return uniq(() => (n && n.culture === 'huaxia' && ctx ? provZh(n, level, ctx, r, nc) : null) || (ctx ? provOther(n, level, ctx, r) : origProvFor(n, level, r)), u);
+    const u0 = used || PN.used('prov'), hz = n && n.culture === 'huaxia', u = hz ? { has: (x) => u0.has(x) || banned(x, level <= 2 ? ctx : null) } : u0;
+    const main = () => (n && n.culture === 'huaxia' && ctx ? provZh(n, level, ctx, r, nc) : null) || (ctx ? provOther(n, level, ctx, r) : origProvFor(n, level, r));
+    // 前 40 次按地形方位起名；都被挡掉时改用不指代任何地方的吉祥字（不再加「新、上」前缀拼出「新河北」）
+    const forms = App.sysOf(n).lv[Math.min(level, App.sysOf(n).levels)];
+    const neutral = () => { const f = P(forms, r); if (f.includes('{X}')) return null; const base = P(NEUT_A, r) + P(NEUT_B, r); return { name: base + f, base }; };
+    return uniq((i) => (!hz || i < 40 || level > 2 ? main() : neutral() || main()), u, hz ? 100 : 60);
   };
   const provOther = (n, level, ctx, r) => {
     const sys = App.sysOf(n), forms = sys.lv[Math.min(level, sys.levels)], form = P(forms, r);
