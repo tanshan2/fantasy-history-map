@@ -278,7 +278,7 @@
     const cells = []; for (let c = 0; c < N; c++) if (S.owner[c] === nid && S.terrain[c] >= 2) cells.push(c);
     buildPopW();
     if (!opts.keepL1) O.deleteProvinces(S.provinces.filter((p) => p.nation === nid).map((p) => p.id));
-    else O.deleteProvinces(S.provinces.filter((p) => p.nation === nid && (p.level || 1) > 1).map((p) => p.id));
+    else O.deleteProvinces(S.provinces.filter((p) => p.nation === nid && (p.level || 1) > 1 && (!opts.only || p.parent === opts.only)).map((p) => p.id)); // only：只重新细分这一个一级区
     if (!cells.length) return;
     // 首都（京畿区划小而密）
     const capCt = S.cities.find((ct) => ct.type === 'capital' && S.owner[O.cellAt(ct.x, ct.y)] === nid);
@@ -314,9 +314,9 @@
       });
     };
     if (opts.keepL1) {
-      cells.forEach((c) => { S.prov2[c] = 0; S.prov3[c] = 0; });
+      cells.forEach((c) => { if (!opts.only || S.prov[c] === opts.only) { S.prov2[c] = 0; S.prov3[c] = 0; } });
       const byName = new Map(plan ? plan.units.map((u) => [u.name, u]) : []);
-      S.provinces.filter((p) => p.nation === nid && (p.level || 1) === 1).forEach((p) => {
+      S.provinces.filter((p) => p.nation === nid && (p.level || 1) === 1 && (!opts.only || p.id === opts.only)).forEach((p) => {
         const g = cells.filter((c) => S.prov[c] === p.id); if (!g.length || maxLv < 2) return;
         const u = p.hist && byName.get(p.name);
         const kh = u ? kidsIn(u.kids, g) : [];
@@ -419,5 +419,31 @@
       O.autoProvinces(n.id, 0, r); k++;
     });
     return k;
+  };
+})();
+
+// ---- 改了一级区的范围后：新划进来的地沿用同一级区里相邻的二、三级；被吃干净的二、三级删除 ----
+(() => {
+  const W = App.W, H = App.H, N = App.N;
+  App.Ops.fillLower = (before) => {
+    const S = App.S, P1 = S.prov, P2 = S.prov2, P3 = S.prov3, q = [];
+    for (let c = 0; c < N; c++) if (P1[c] && P2[c]) q.push(c);
+    for (let h = 0; h < q.length; h++) {
+      const c = q[h], x = c % W, y = (c / W) | 0;
+      for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) {
+        if (n < 0 || P1[n] !== P1[c] || P2[n]) continue;
+        P2[n] = P2[c]; if (!P3[n]) P3[n] = P3[c]; q.push(n);
+      }
+    }
+    // 三级：同一二级区里没有三级的格子，沿用相邻的三级
+    const q3 = []; for (let c = 0; c < N; c++) if (P2[c] && P3[c]) q3.push(c);
+    for (let h = 0; h < q3.length; h++) {
+      const c = q3[h], x = c % W, y = (c / W) | 0;
+      for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) {
+        if (n < 0 || P2[n] !== P2[c] || P3[n]) continue;
+        P3[n] = P3[c]; q3.push(n);
+      }
+    }
+    if (App.Ops.pruneEmptyProvinces && before) App.Ops.pruneEmptyProvinces(before);
   };
 })();
