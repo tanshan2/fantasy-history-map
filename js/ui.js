@@ -188,7 +188,7 @@
         <div class="row wrap"><button class="btn" data-act="autoProv">重新划分全部</button><button class="btn" data-act="autoSub">保留${App.levelName(an, 1)}，只细分下级</button></div>
         <div class="row wrap"><button class="btn" data-act="autoCity" title="数量看可用土地，大小看地貌、气候、河流、海岸">按地理补充城市</button><button class="btn" data-act="autoArmy">按国力生成军队</button><button class="btn danger" data-act="delNation">删除国家</button></div></div>`;
     }
-    h += `<div class="row wrap"><button class="btn" data-act="autoAll">一键划分所有国家的行政区</button><button class="btn" data-act="recolor">相邻国家自动配色</button><button class="btn" data-act="family">家族 / 族谱…</button><button class="btn" data-act="power">国力排名</button></div>`;
+    h += `<div class="row wrap"><button class="btn pri" data-act="fillBlank" title="把地图上所有无主的陆地按地区文化生成国家（行政区、城市、军队、统治家族一起生成）">一键生成空白地区的国家</button><button class="btn" data-act="autoAll">一键划分所有国家的行政区</button><button class="btn" data-act="recolor">相邻国家自动配色</button><button class="btn" data-act="family">家族 / 族谱…</button><button class="btn" data-act="power">国力排名</button></div>`;
     return h;
   };
   UI.tab_provs = () => {
@@ -284,6 +284,18 @@
     act("autoSub", () => { App.pushUndo(["prov", "prov2", "prov3"]); App.Ops.autoProvinces(an.id, 0, Math.random, { keepL1: true }); App.changed({ pol: true, ui: true }); });
     act("family", () => App.Family.show());
     act('power', () => UI.powerDialog());
+    act('fillBlank', () => {
+      App.pushUndo(['owner', 'prov', 'prov2', 'prov3']);
+      UI.busy ? UI.busy('正在按地区文化生成国家…', run) : run();
+      function run() {
+        const made = App.Fill.fillBlank();
+        App.changed({ pol: true, ui: true });
+        if (!made.length) { UI.toast('地图上没有空白的陆地了'); return; }
+        const cs = {}; made.forEach((n) => { const nm = App.CULTURES.find((c) => c.id === n.culture)?.name || n.culture; cs[nm] = (cs[nm] || 0) + 1; });
+        const main = App.nation(App.S.meta.mainNation);
+        UI.toast('生成 ' + made.length + ' 个国家：' + Object.entries(cs).map(([k, v]) => k.replace(/（.*）/, '') + v).join('、') + (main ? '；建国年按主国「' + main.name + '」前后 300 年' : ''));
+      }
+    });
     act('profile', () => UI.profile(an.id));
     act('mkDyn', () => { const f = App.Polity.dynasty(an); if (f && !confirm('重新生成「' + an.name + '」的统治家族？原家族会保留。')) return; App.pushUndo(); if (f) f.ruling = 0; App.Polity.makeDynasty(an); App.changed({ ui: true }); UI.toast('已生成 ' + App.Polity.dynasty(an).name + '（' + App.Polity.title(an).house + '）'); });
     if (an && UI.bindPolityFields) UI.bindPolityFields(p, an, () => UI.refreshTool());
