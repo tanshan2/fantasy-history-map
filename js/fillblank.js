@@ -84,15 +84,17 @@
   FB.SPAN = 300;
   FB.baseYear = () => { const S = App.S, m = App.nation(S.meta.mainNation); return m ? App.Polity.founded(m) : (S.meta.year || 1) - 150; };
   FB.yearNear = (r = Math.random) => {
-    const S = App.S, base = FB.baseYear(), now = S.meta.year || 1;
-    const hi = Math.min(base + FB.SPAN, Math.max(now, base)), lo = base - FB.SPAN;
+    const S = App.S, base = FB.baseYear(), now = S.meta.year ?? 1;
+    let lo = base - FB.SPAN, hi = Math.min(base + FB.SPAN, now); if (hi < lo) { hi = now; lo = now - FB.SPAN; }
     return Math.round(lo + r() * (hi - lo));
   };
   // 设主国并调整：已经在范围内的保留，超出的改到范围内；附庸不早于宗主
   App.Polity.alignFounding = (mainId, r = Math.random) => {
     const S = App.S, m = App.nation(mainId); if (!m) return 0;
     S.meta.mainNation = m.id;
-    const base = App.Polity.founded(m), now = S.meta.year || 1, hi = Math.min(base + FB.SPAN, Math.max(now, base)), lo = base - FB.SPAN;
+    const base = App.Polity.founded(m), now = S.meta.year ?? 1;
+    // 主国前后 300 年，且不晚于「现在」；若现在比主国建国还早，就以现在为准往前 300 年
+    let lo = base - FB.SPAN, hi = Math.min(base + FB.SPAN, now); if (hi < lo) { hi = now; lo = now - FB.SPAN; }
     let k = 0;
     S.nations.forEach((n) => {
       if (n.id === m.id) return;
@@ -100,6 +102,15 @@
       if (y < lo || y > hi || n.founded == null) { n.founded = Math.round(lo + r() * (hi - lo)); k++; }
     });
     S.nations.forEach((n) => { const ov = n.overlord && App.nation(n.overlord); if (ov && n.founded < App.Polity.founded(ov)) { n.founded = Math.min(hi, App.Polity.founded(ov) + Math.round(r() * 80)); } });
+    return k;
+  };
+
+  // 改了「现在年份」：有主国就按主国前后 300 年（且不晚于现在）重新检查；没有主国，晚于现在的改到现在之前 300 年内
+  App.Polity.yearChanged = (r = Math.random) => {
+    const S = App.S, now = S.meta.year || 1;
+    if (App.nation(S.meta.mainNation)) return App.Polity.alignFounding(S.meta.mainNation, r);
+    let k = 0;
+    S.nations.forEach((n) => { if (App.Polity.founded(n) > now || n.founded == null) { n.founded = Math.round(now - r() * FB.SPAN); k++; } });
     return k;
   };
 
