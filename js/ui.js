@@ -39,7 +39,7 @@
     $('#panelToggle').onclick = () => document.body.classList.toggle('panel-open');
     $('#fileJson').onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
-      try { App.deserialize(JSON.parse(await f.text())); App.afterBigChange(); App.R.fit(); UI.toast('已打开：' + f.name); } catch (err) { UI.toast('打开失败：' + err.message); }
+      try { App.deserialize(JSON.parse(await f.text())); App.afterBigChange(); App.R.fit(); UI.toast('已打开：' + f.name); setTimeout(() => UI.histCheck && UI.histCheck(), 600); } catch (err) { UI.toast('打开失败：' + err.message); }
       e.target.value = '';
     };
     $('#fileImg').onchange = (e) => {
