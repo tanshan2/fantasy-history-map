@@ -53,6 +53,15 @@
       rd.readAsDataURL(f); e.target.value = '';
     };
     $('#mapName').addEventListener('change', (e) => { App.S.meta.name = e.target.value; App.autosave(); });
+    // 现在年份：改了以后自动检查各国建国年
+    $('#mapYear').addEventListener('change', (e) => {
+      const y = Math.round(+e.target.value); if (!isFinite(y)) return;
+      App.pushUndo(); App.S.meta.year = y;
+      const k = App.Polity.yearChanged ? App.Polity.yearChanged() : 0;
+      const main = App.nation(App.S.meta.mainNation);
+      App.changed({ ui: true });
+      UI.toast('现在是 ' + (y < 0 ? '公元前 ' + -y : y) + ' 年' + (k ? '，已调整 ' + k + ' 个国家的建国年' : '') + (main && App.Polity.founded(main) > y ? '（注意：主国「' + main.name + '」的建国年晚于现在）' : ''));
+    });
     $('#btnFamily').onclick = () => App.Family.show();
     $('#btnPower').onclick = () => UI.powerDialog(); $('#btnProfile').onclick = () => UI.profileCurrent();
     UI.refreshTool(); UI.refresh();
@@ -147,6 +156,7 @@
     if (UI.syncLv) UI.syncLv();
     document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === UI.tab));
     $('#mapName').value = App.S.meta.name || '';
+    if ($('#mapYear') && document.activeElement !== $('#mapYear')) $('#mapYear').value = App.S.meta.year ?? 1;
     const p = $('#tabBody');
     // 重绘面板时保留滚动位置（同一页内操作不跳回顶部）
     const panel = $('#panel'), sameTab = UI._lastTab === UI.tab;
