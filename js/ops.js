@@ -76,60 +76,104 @@
     if (k !== RVK || !RVC) { RVC = App.Polity ? App.Polity.riverMask() : new Uint8Array(N); RVK = k; }
     return RVC;
   };
-  O.splitCells = (cells, k, r, salt = 0) => {
-    const S = App.S, L = cells.length;
-    k = Math.max(1, Math.min(k, Math.floor(L / 12) || 1));
+  O.splitCells = (cells, k, r, salt = 0, opt = {}) => {
+    const S = App.S, L = cells.length, st = opt.style || App.adminStyle(null);
+    // opt.fixed：真实历史区划，每项是一组锚点格（该区的治所和下辖府州），前 F 个区从这些锚点一起生长、大小不再调整
+    const fixedSets = opt.fixed || [], F = fixedSets.length;
+    k = Math.max(1, F, Math.min(k, Math.floor(L / 3) || 1));
     if (k === 1) return { k, idx: new Int32Array(L) };
     if (!LOC) LOC = new Int32Array(N).fill(-1);
     cells.forEach((c, j) => (LOC[c] = j));
-    const rv = riverCached(), sd = salt * 13.7 + 5;
-    const cost = new Float32Array(L);
+    const anchors = fixedSets.map((set) => set.map((c) => LOC[c]).filter((j) => j >= 0));
+    const anchorOf = new Int32Array(L); anchors.forEach((a, i) => a.forEach((j) => (anchorOf[j] = i + 1)));
+    const rv = riverCached(), sd = salt * 13.7 + 5, wig = st.wiggle, ridge = st.ridge;
+    const cost = new Float32Array(L), onRiver = new Uint8Array(L);
     // 「海拔」：平地 0，丘陵 1，山地 2.2，雪山 3；跨越海拔落差的代价高，边界就落在山前、分水岭上，盆地自成一区
     const ELEV = [0, 0, 0, 0.2, 1, 2.2, 3, 0.3, 0, 0.4], elev = new Float32Array(L);
-    cells.forEach((c, j) => { const t = S.terrain[c], x = c % W, y = (c / W) | 0; elev[j] = ELEV[t] || 0; cost[j] = 1 + U.fbm(x / 16 + sd, y / 16, 3, 3) * 0.9 + (rv[c] ? 7 : 0) + (t === 5 ? 1.6 : t === 6 ? 2.6 : t === 4 ? 0.4 : 0) + (t === 8 ? 0.8 : 0); });
+    // 土地丰饶度（0.15～1）：治所设在富庶处，均衡时按「人口」而不是格数
+    const fert = new Float32Array(L);
+    cells.forEach((c, j) => {
+      const t = S.terrain[c], x = c % W, y = (c / W) | 0; elev[j] = ELEV[t] || 0; fert[j] = POPW ? POPW[c] : 1;
+      // 两种尺度的噪声：大尺度让区域有凸有凹，小尺度让边界曲折
+      const n1 = U.fbm(x / 16 + sd, y / 16, 3, 3), n2 = U.fbm(x / 52 + sd * 0.37 + 31, y / 52 + 11, 2, 2);
+      let cc = 1 + (n1 * 0.9 + (n2 - 0.5) * 1.1) * wig;
+      cc += ((t === 5 ? 1.6 : t === 6 ? 2.6 : t === 4 ? 0.4 : 0) + (t === 8 ? 0.8 : 0)) * ridge;
+      if (st.oasis && fert[j] < 0.3) cc *= 1 - 0.45 * st.oasis;  // 荒漠：很快被最近的绿洲吞下，边界落在戈壁中间
+      if (rv[c]) {
+        onRiver[j] = 1;
+        // 大河作界与否随河段变化（史实中大河时而为界、时而一区跨两岸），各文明倾向不同
+        const e = U.clamp(st.river + (n2 - 0.5) * 1.4, -1, 1);
+        cc = e > 0 ? cc + 9 * e : Math.max(0.25, cc * (1 + 0.7 * e));
+      }
+      cost[j] = Math.max(0.2, cc);
+    });
+    // 八邻域（斜向 ×√2）：边界不再是菱形和蜂窝
     const nbs = (j, f) => { const c = cells[j], x = c % W; if (x > 0 && LOC[c - 1] >= 0) f(LOC[c - 1]); if (x < W - 1 && LOC[c + 1] >= 0) f(LOC[c + 1]); if (c >= W && LOC[c - W] >= 0) f(LOC[c - W]); if (c < N - W && LOC[c + W] >= 0) f(LOC[c + W]); };
+    const nbs8 = (j, f) => {
+      const c = cells[j], x = c % W, L_ = x > 0, R_ = x < W - 1, U_ = c >= W, D_ = c < N - W;
+      if (L_ && LOC[c - 1] >= 0) f(LOC[c - 1], 1); if (R_ && LOC[c + 1] >= 0) f(LOC[c + 1], 1); if (U_ && LOC[c - W] >= 0) f(LOC[c - W], 1); if (D_ && LOC[c + W] >= 0) f(LOC[c + W], 1);
+      if (L_ && U_ && LOC[c - W - 1] >= 0) f(LOC[c - W - 1], 1.414); if (R_ && U_ && LOC[c - W + 1] >= 0) f(LOC[c - W + 1], 1.414);
+      if (L_ && D_ && LOC[c + W - 1] >= 0) f(LOC[c + W - 1], 1.414); if (R_ && D_ && LOC[c + W + 1] >= 0) f(LOC[c + W + 1], 1.414);
+    };
     const xy = (j) => [cells[j] % W, (cells[j] / W) | 0];
-    // 种子（局部下标）
+    // 种子（局部下标）：治所优先设在城市上（州府、郡治多是大城）
     const ORD = { capital: 0, large: 1, port: 2, medium: 3, small: 4, fortress: 5, pass: 6, village: 7 };
-    const cityJ = S.cities.map((ct) => { const c = O.cellAt(ct.x, ct.y); return [c >= 0 ? LOC[c] : -1, ORD[ct.type] ?? 5, c]; }).filter(([j, o, c]) => j >= 0 && o <= 4 && !rv[c]).sort((a, b) => a[1] - b[1]);
-    const minSep = Math.sqrt(L / k) * 0.75, seeds = [];
-    const far = (j, d) => { const [x, y] = xy(j); return seeds.every((s) => { const [sx, sy] = xy(s); return Math.hypot(sx - x, sy - y) >= d; }); };
-    cityJ.forEach(([j]) => { if (seeds.length < k && far(j, minSep)) seeds.push(j); });
-    const nCity = seeds.length;
+    const riverBar = st.river > 0;
+    const cityJ = S.cities.map((ct) => { const c = O.cellAt(ct.x, ct.y); return [c >= 0 ? LOC[c] : -1, ORD[ct.type] ?? 5, c]; }).filter(([j, o, c]) => j >= 0 && o <= 4 && !(riverBar && rv[c])).sort((a, b) => a[1] - b[1]);
+    const minSep = Math.sqrt(L / k) * 0.75, seeds = anchors.map((a) => a[0]), pts = anchors.flat();
+    const far = (j, d) => { const [x, y] = xy(j); return pts.every((s) => { const [sx, sy] = xy(s); return Math.hypot(sx - x, sy - y) >= d; }); };
+    cityJ.forEach(([j]) => { if (seeds.length < k && far(j, minSep)) { seeds.push(j); pts.push(j); } });
+    const nCity = seeds.length - F;
     const step = Math.max(1, Math.floor(L / 2500)), sample = []; for (let j = 0; j < L; j += step) sample.push(j);
-    if (!seeds.length) seeds.push(sample[Math.floor(r() * sample.length)]);
+    if (!seeds.length) { seeds.push(sample[Math.floor(r() * sample.length)]); pts.push(seeds[0]); }
     const md = new Float32Array(sample.length).fill(Infinity);
     const upd = (s) => { const [sx, sy] = xy(s); sample.forEach((j, i) => { const [x, y] = xy(j), d = (x - sx) ** 2 + (y - sy) ** 2; if (d < md[i]) md[i] = d; }); };
-    seeds.forEach(upd);
-    while (seeds.length < k) { let bi = 0, bd = -1; sample.forEach((j, i) => { const v = md[i] * (0.75 + r() * 0.5); if (v > bd) { bd = v; bi = i; } }); seeds.push(sample[bi]); upd(sample[bi]); }
-    // 局部多源最短路
-    const grow = (mult) => {
+    pts.forEach(upd);
+    // 其余治所：远离已有治所，且偏向富庶的平原河谷（绿洲文明几乎只设在绿洲）
+    const fpow = 1 + 2 * (st.oasis || 0);
+    while (seeds.length < k) { let bi = 0, bd = -1; sample.forEach((j, i) => { const v = md[i] * (0.75 + r() * 0.5) * Math.pow(0.25 + fert[j], fpow); if (v > bd) { bd = v; bi = i; } }); seeds.push(sample[bi]); upd(sample[bi]); }
+    // 局部多源最短路。大小均衡用「加法」起点偏移（不是乘法速度）：
+    // 乘法权重下两区分界是一个圆，小区会被邻区整圈包住（像一个路被另一个路包围），历史上不会有这种区划；
+    // 加法权重下分界是开口的曲线，一个区不可能被单独一个邻区包住。
+    let meanD = 1;
+    const grow = (off) => {
       const best = new Float64Array(L).fill(Infinity), who = new Int32Array(L).fill(-1), h = new U.Heap();
-      seeds.forEach((s, i) => { best[s] = 0; who[s] = i; h.push(0, s); });
-      while (h.size) { const j = h.pop(), d = h.topK; if (d > best[j]) continue; const m = mult[who[j]], si = who[j];
-        nbs(j, (q) => { const nd = d + (cost[q] + Math.abs(elev[q] - elev[j]) * 3.2) * m; if (nd < best[q]) { best[q] = nd; who[q] = si; h.push(nd, q); } }); }
+      seeds.forEach((s, i) => { for (const a of i < F ? anchors[i] : [s]) if (off[i] < best[a]) { best[a] = off[i]; who[a] = i; h.push(off[i], a); } });
+      while (h.size) { const j = h.pop(), d = h.topK; if (d > best[j]) continue; const si = who[j];
+        nbs8(j, (q, dl) => { const nd = d + (cost[q] + Math.abs(elev[q] - elev[j]) * 3.2 * ridge) * dl; if (nd < best[q]) { best[q] = nd; who[q] = si; h.push(nd, q); } }); }
+      let s = 0, n = 0; for (let j = 0; j < L; j++) if (who[j] >= 0) { s += best[j] - off[who[j]]; n++; } meanD = n ? s / n : 1;
       return who;
     };
-    // 劳埃德松弛：非城市种子移到所辖区域的中心附近（区域更紧凑，不会细长怪异）
-    const fixed = new Set(seeds.slice(0, nCity));
-    for (let it = 0; it < 2; it++) {
+    // 均衡目标按「人口」：富庶地方的区小，草原荒漠的区大；pop 越小越接近按地盘平分
+    const wt = new Float32Array(L); let wsum = 0; for (let j = 0; j < L; j++) { wt[j] = Math.pow(fert[j], st.pop); wsum += wt[j]; }
+    // 劳埃德松弛：非城市种子移到所辖区域的「人口重心」附近（治所在人多的地方，区域紧凑）
+    const fixed = new Set(seeds.slice(0, F + nCity));
+    for (let it = 0; it < 2 && k > F; it++) {
       const w0 = grow(seeds.map(() => 1)), sx = new Float64Array(k), sy = new Float64Array(k), sn = new Float64Array(k);
-      for (let j = 0; j < L; j++) { const i = w0[j]; if (i < 0) continue; const [x, y] = xy(j); sx[i] += x; sy[i] += y; sn[i]++; }
+      for (let j = 0; j < L; j++) { const i = w0[j]; if (i < 0) continue; const [x, y] = xy(j); sx[i] += x * wt[j]; sy[i] += y * wt[j]; sn[i] += wt[j]; }
       for (let i = 0; i < k; i++) {
         if (fixed.has(seeds[i]) || !sn[i]) continue;
         const cx = sx[i] / sn[i], cy = sy[i] / sn[i]; let bj = seeds[i], bd = Infinity;
-        for (let j = 0; j < L; j++) { if (w0[j] !== i) continue; const [x, y] = xy(j), d = (x - cx) ** 2 + (y - cy) ** 2 + elev[j] * 6 + (rv[cells[j]] ? 4 : 0); if (d < bd) { bd = d; bj = j; } }
+        for (let j = 0; j < L; j++) { if (w0[j] !== i) continue; const [x, y] = xy(j), d = (x - cx) ** 2 + (y - cy) ** 2 + elev[j] * 6 + (riverBar && onRiver[j] ? 4 : 0) - fert[j] * 4; if (d < bd) { bd = d; bj = j; } }
         seeds[i] = bj;
       }
     }
-    // 均衡目标按「人口」而不是格数：富庶地方的区小，草原荒漠的区大
-    const wt = new Float32Array(L); let wsum = 0; cells.forEach((c, j) => { wt[j] = POPW ? POPW[c] : 1; wsum += wt[j]; });
-    const target = wsum / k, mult = seeds.map(() => 0.85 + r() * 0.3); let who;
-    for (let it = 0; it < 5; it++) {
-      who = grow(mult);
+    // 每个区的目标大小：京畿小、边地大（core），再加随机悬殊（spread，对数正态）
+    let cap = -1; if (opt.cap != null && LOC[opt.cap] >= 0) cap = LOC[opt.cap];
+    const dist = seeds.map((s) => { if (cap < 0) return 0.5; const [x, y] = xy(s), [cx, cy] = xy(cap); return Math.hypot(x - cx, y - cy); });
+    const dmax = Math.max(1e-6, ...dist);
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - r() * 0.999)) * Math.cos(2 * Math.PI * r());
+    const fac = seeds.map((s, i) => { const d = cap < 0 ? 0.5 : dist[i] / dmax; return ((1 - st.core) + st.core * (0.3 + 2.2 * d)) * Math.exp(U.clamp(gauss() * st.spread, -1.2, 1.2)); });
+    const fsum = fac.reduce((a, b) => a + b, 0);
+    const off = seeds.map(() => 0); let who;
+    for (let it = 0; it < 10; it++) {
+      who = grow(off);
       const size = new Float64Array(k); for (let j = 0; j < L; j++) if (who[j] >= 0) size[who[j]] += wt[j];
-      let worst = 0; for (let i = 0; i < k; i++) { const q = size[i] / target; worst = Math.max(worst, q, 1 / Math.max(q, 0.05)); mult[i] *= U.clamp(Math.pow(Math.max(q, 0.05), 0.55), 0.6, 1.7); }
-      if (worst < 1.6) break;
+      let worst = 0;
+      if (F >= k) break; // 全是真实区划：边界只由地理决定
+      for (let i = F; i < k; i++) { const q = Math.max(size[i] / (wsum * fac[i] / fsum), 0.05); worst = Math.max(worst, q, 1 / q); off[i] += meanD * U.clamp(0.6 * Math.log(q), -0.6, 0.6); }
+      const mn = Math.min(...off); for (let i = 0; i < k; i++) off[i] -= mn;
+      if (worst < 1.35) break;
     }
     // 没扩张到的（隔海的岛）：归最近的种子
     const idx = new Int32Array(L);
@@ -161,59 +205,135 @@
     const biggest = new Map(); pieces.forEach((p) => { if (!biggest.has(p.id) || biggest.get(p.id).comp.length < p.comp.length) biggest.set(p.id, p); });
     pieces.sort((a, b) => a.comp.length - b.comp.length).forEach((p) => {
       if (biggest.get(p.id) === p) return;
+      // 真实区划的碎块里有本区的治所或府州（如狭长的东山道被隔开），保留
+      if (p.id < F && p.comp.some((j) => anchorOf[j] === p.id + 1)) return;
       const touch = new Map(); p.comp.forEach((j) => nbs(j, (q) => { if (idx[q] !== p.id) touch.set(idx[q], (touch.get(idx[q]) || 0) + 1); }));
       let to = -1, bt = 0; touch.forEach((v, key) => { if (v > bt) { bt = v; to = key; } });
       if (to < 0) { if (p.comp.length >= (L / k) * 0.3) return; const [x, y] = xy(p.comp[0]); let bd = Infinity; seeds.forEach((s, t) => { const [sx, sy] = xy(s), d = (sx - x) ** 2 + (sy - y) ** 2; if (d < bd && t !== p.id) { bd = d; to = t; } }); }
       if (to >= 0) p.comp.forEach((j) => (idx[j] = to));
     });
+    // 兜底：被单独一个邻区整圈包住、又不挨上级边界（国界、海岸）的区，并入包住它的区
+    for (let pass = 0; pass < 3; pass++) {
+      const nb = Array.from({ length: k }, () => new Set()), edge = new Uint8Array(k);
+      for (let j = 0; j < L; j++) {
+        const c = cells[j], x = c % W, i = idx[j];
+        const out = [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, c >= W ? c - W : -1, c < N - W ? c + W : -1];
+        for (const q of out) { if (q < 0 || LOC[q] < 0) { edge[i] = 1; continue; } const iq = idx[LOC[q]]; if (iq !== i) nb[i].add(iq); }
+      }
+      let fixedAny = false;
+      for (let i = 0; i < k; i++) if (!edge[i] && nb[i].size === 1) { const to = [...nb[i]][0]; for (let j = 0; j < L; j++) if (idx[j] === i) idx[j] = to; fixedAny = true; }
+      if (!fixedAny) break;
+    }
     cells.forEach((c) => (LOC[c] = -1));
     return { k, idx };
   };
 
   // 自动划分行政区：数量按「真实面积 ÷ 该制度各级单位的历史典型面积」来定，再受历史上下辖数量范围约束
   // 例如明代一省约 22 万平方公里、一府约 2.5 万、一县约 3500；唐代一道约 40 万、一州约 1.5 万
-  const MINC = [0, 120, 45, 22]; // 地图分辨率限制：每级单位至少占的格数（太小的县在地图上画不出来）
+  // 地图分辨率限制：每级单位至少占的格数（真实地图一格约 400 平方公里，县最少 3 格约 1200 平方公里）
+  const MINC = [0, 24, 7, 3];
   // 人口权重：按土地丰饶度（地貌×气候×河流），富庶平原 1，草原约 0.3，荒漠高原约 0.15
   let POPW = null;
   const buildPopW = () => { const rv = riverCached(); POPW = new Float32Array(N); for (let c = 0; c < N; c++) if (App.S.terrain[c] >= 2) POPW[c] = 0.15 + 0.85 * Math.min(1, App.Polity.fertility(c, rv)); };
-  // 人口面积 = 面积 × 人口权重（数量按这个算）
+  // 人口面积 = 面积 × 人口权重
   const areaOf = (cells) => { const ra = App.Polity.rowAreas(); let a = 0; cells.forEach((c) => (a += ra[(c / W) | 0] * (POPW ? POPW[c] : 1))); return a; };
   O.unitArea = (sys, level) => { const a = App.ADMIN_AREA[App.sysKeyOf(sys)] || [0, 200000, 25000, 3500]; return a[level] || a[a.length - 1] / 6; };
+  // 应分几个 = 人口面积 ÷ (历史典型面积 × 历史疆域的平均丰饶度)：在历史疆域上正好得到史书中的数量
+  const wantCount = (sys, level, cells) => areaOf(cells) / (O.unitArea(sys, level) * ((App.ADMIN_REF && App.ADMIN_REF[App.sysKeyOf(sys)]) || 0.75));
   const kidCount = (sys, level, cells, r) => {
     const [lo, hi] = sys.kids[level] || [3, 8];
     const cap = Math.floor(cells.length / MINC[level]); if (cap < 2) return 1;
-    const want = Math.round((areaOf(cells) / O.unitArea(sys, level)) * (0.88 + r() * 0.24));
-    return Math.max(2, Math.min(cap, U.clamp(want, lo, hi)));
+    const want = Math.round(wantCount(sys, level, cells) * (0.9 + r() * 0.2));
+    return Math.max(Math.min(2, cap), Math.min(cap, U.clamp(want, lo, hi)));
+  };
+  // ---- 真实历史区划：先看领土覆盖了哪些真实的一级区，有就沿用，没有的土地再新生成 ----
+  const HIST_SUF = /(行省|布政使司|省|路|道|州|国|府|郡|尹|牧|卫|军|监|司|翊|风)$/;
+  O.histBase = (name) => { const b = name.replace(HIST_SUF, ''); return Array.from(b).length >= 1 ? b : name; };
+  // 把一个经纬度落到本国领土内最近的格（3 格以内），不在本国返回 -1
+  const anchorCell = (pj, lon, lat, nid) => {
+    const [fx, fy] = pj.fwd(lon, lat), x0 = Math.floor(fx), y0 = Math.floor(fy), S = App.S;
+    let best = -1, bd = Infinity;
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      const x = x0 + dx, y = y0 + dy; if (x < 0 || y < 0 || x >= W || y >= App.H) continue;
+      const c = y * W + x; if (S.owner[c] !== nid || S.terrain[c] < 2) continue;
+      const d = dx * dx + dy * dy; if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  };
+  O.histPlan = (n) => {
+    const S = App.S, key = App.sysKey(n), real = App.ADMIN_REAL && App.ADMIN_REAL[key];
+    if (!real || n.histAdmin === false || S.meta.geo !== real.geo || !App.Templates || !App.Templates.PROJ[real.geo]) return null;
+    const pj = App.Templates.PROJ[real.geo], units = [];
+    real.l1.forEach(([name, kids]) => {
+      const inside = kids.map(([kn, lo, la]) => ({ name: kn, cell: anchorCell(pj, lo, la, n.id) })).filter((a) => a.cell >= 0);
+      // 治所在本国，或至少三分之一的府州在本国：算作覆盖了这个真实一级区
+      const seatIn = inside.length && inside[0].name === kids[0][0];
+      if (inside.length && (seatIn || inside.length >= kids.length / 3)) units.push({ name, kids: inside, total: kids.length });
+    });
+    return units.length ? { key, units } : null;
   };
   O.autoProvinces = (nid, k1, r = Math.random, opts = {}) => {
     const S = App.S, n = App.nation(nid); if (!n) return;
-    const sys = App.sysOf(n), maxLv = sys.levels;
+    const sys = App.sysOf(n), maxLv = sys.levels, style = App.adminStyle(n);
     const cells = []; for (let c = 0; c < N; c++) if (S.owner[c] === nid && S.terrain[c] >= 2) cells.push(c);
     buildPopW();
     if (!opts.keepL1) O.deleteProvinces(S.provinces.filter((p) => p.nation === nid).map((p) => p.id));
     else O.deleteProvinces(S.provinces.filter((p) => p.nation === nid && (p.level || 1) > 1).map((p) => p.id));
     if (!cells.length) return;
-    const sub = (parentCells, level, parent, kk) => {
-      const { k, idx } = O.splitCells(parentCells, kk, r, (parent ? parent.id : nid) * 7 + level);
+    // 首都（京畿区划小而密）
+    const capCt = S.cities.find((ct) => ct.type === 'capital' && S.owner[O.cellAt(ct.x, ct.y)] === nid);
+    const cap = capCt ? O.cellAt(capCt.x, capCt.y) : -1;
+    const plan = O.histPlan(n);
+    const stat = { hist: 0, gen: 0, names: [] };
+    // 同名锚点（一个大国多个补充点）合并为一个区
+    const kidsIn = (kids, g) => { const inG = new Set(g), m = new Map(); kids.forEach((a) => { if (!inG.has(a.cell)) return; if (!m.has(a.name)) m.set(a.name, { name: a.name, anchors: [] }); m.get(a.name).anchors.push(a.cell); }); return [...m.values()]; };
+    // 史料覆盖不到的部分该新生成几个区：离所有真实治所超过约 3 个典型半径的土地，按面积折算，不足半个区为 0
+    const genFor = (g, hist, level) => {
+      const ra = App.Polity.rowAreas(), rr = Math.sqrt(O.unitArea(sys, level) / (ra[(App.H / 2) | 0] || 400) / Math.PI), R = Math.max(4, rr * (level === 1 ? 1.6 : 2.2));
+      const pts = hist.flatMap((h) => h.anchors.map((c) => [c % W, (c / W) | 0]));
+      const unc = g.filter((c) => { const x = c % W, y = (c / W) | 0; return !pts.some(([px, py]) => (px - x) ** 2 + (py - y) ** 2 <= R * R); });
+      return unc.length >= MINC[level] ? Math.round(wantCount(sys, level, unc)) : 0;
+    };
+    // hist：这一级的真实区划 [{name, anchors:[格], kids:[{name, cell}]}]，排在前面；其余 kk - hist.length 个新生成
+    const sub = (parentCells, level, parent, kk, hist = []) => {
+      const { k, idx } = O.splitCells(parentCells, Math.max(kk, hist.length), r, (parent ? parent.id : nid) * 7 + level, { style, cap, fixed: hist.map((h) => h.anchors) });
       // 先分组，只为真正有领土的块建立行政区（不会出现空壳县）
       const groups = Array.from({ length: k }, () => []);
       parentCells.forEach((c, j) => groups[idx[j]].push(c));
-      groups.filter((g) => g.length).forEach((g) => {
-        const p = O.addProvince(nid, App.Names.provFor(n, level, r), level, parent ? parent.id : 0);
+      groups.forEach((g, gi) => {
+        if (!g.length) return;
+        const h = hist[gi], pid = parent ? parent.id : 0;
+        const p = h ? O.addProvince(nid, h.name, level, pid) : O.addProvince(nid, App.PlaceNames ? { name: "", base: "" } : App.Names.provFor(n, level, r), level, pid);
+        if (h) { p.hist = true; p.base = O.histBase(h.name); if (level === 1) { stat.hist++; stat.names.push(h.name); } }
+        else if (level === 1) stat.gen++;
         const arr = App.provArr(level); g.forEach((c) => (arr[c] = p.id));
-        if (level < maxLv) sub(g, level + 1, p, kidCount(sys, level + 1, g, r));
+        if (level < maxLv) {
+          const kh = h && h.kids ? kidsIn(h.kids, g) : [];
+          sub(g, level + 1, p, kh.length ? kh.length + genFor(g, kh, level + 1) : kidCount(sys, level + 1, g, r), kh);
+        }
       });
     };
     if (opts.keepL1) {
       cells.forEach((c) => { S.prov2[c] = 0; S.prov3[c] = 0; });
+      const byName = new Map(plan ? plan.units.map((u) => [u.name, u]) : []);
       S.provinces.filter((p) => p.nation === nid && (p.level || 1) === 1).forEach((p) => {
         const g = cells.filter((c) => S.prov[c] === p.id); if (!g.length || maxLv < 2) return;
-        sub(g, 2, p, kidCount(sys, 2, g, r));
+        const u = p.hist && byName.get(p.name);
+        const kh = u ? kidsIn(u.kids, g) : [];
+        sub(g, 2, p, kh.length ? kh.length + genFor(g, kh, 2) : kidCount(sys, 2, g, r), kh);
       });
-      return;
+      return stat;
     }
-    if (!k1) k1 = U.clamp(Math.round(areaOf(cells) / O.unitArea(sys, 1)), 1, 40);
+    if (plan && !k1) {
+      // 真实区划覆盖不到的土地（离所有真实府州都很远）：按面积新生成一级区；不足半个区的边角并入相邻真实区
+      const hist = plan.units.map((u) => ({ name: u.name, anchors: u.kids.map((a) => a.cell), kids: u.kids }));
+      const gen = genFor(cells, hist, 1);
+      sub(cells, 1, null, hist.length + gen, hist);
+      return stat;
+    }
+    if (!k1) k1 = U.clamp(Math.round(wantCount(sys, 1, cells)), 1, 40);
     sub(cells, 1, null, Math.min(k1, Math.max(1, Math.floor(cells.length / MINC[1]))));
+    return stat;
   };
   // 按地理生成城市（数量看可用土地，大小看城址的地貌、气候、河流、海岸）
   O.autoCities = (nid, r = Math.random, density = 1, opt = {}) => App.Polity.genCities(nid, r, { density, ...opt });
