@@ -232,3 +232,4 @@ kbd{display:inline-block;min-width:22px;text-align:center;padding:1px 6px;border
 .card.multi b.gold{color:var(--gold)}
 #lvBtns .sep{width:1px;height:18px;background:var(--line);margin:0 4px}
 #optbar select[data-act=activeProv]{max-width:130px}#optbar input[data-act=provSearch]{width:88px}
+b.gold,.gold{color:var(--gold)}
