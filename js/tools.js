@@ -106,6 +106,7 @@
     clearTimeout(flushT); flushT = 0;
     if ((T.cur === 'color' || T.cur === 'nation') && !T.opt.erase && T.pending.pol) App.Ops.fillUnassigned();
     const hadPol = !!T.pending.pol;
+    if (T.cur === 'prov' && hadPol && App.Ops.fillLower) App.Ops.fillLower(T.provBefore);
     if (T.cur === 'war' && App.War) App.War.afterBrush();
     flushNow(true); T.wetOn = false; T.wetCtx.clearRect(0, 0, W, H);
     if (hadPol && POL.includes(T.cur) && T.cur !== 'war' && !T.opt.erase && T.opt.askRefine !== false && App.Refine && T.strokeSnap) {
@@ -310,12 +311,28 @@
       return;
     }
     if (BRUSH.includes(T.cur)) {
+      // 行政区工具「从地图选」：点哪里就选中哪里最细一级的行政区（国家也跟着切换）
+      // 二、三级不能手动涂：选中的是二三级时自动换成它所属的一级
+      if (T.cur === 'prov' && T.activeProv && (App.province(T.activeProv)?.level || 1) > 1 && !T.opt.erase) {
+        const top = App.Ops.ancestors(App.province(T.activeProv)).find((q) => (q.level || 1) === 1);
+        T.activeProv = top ? top.id : 0; App.UI.refresh(); App.UI.refreshTool();
+        App.UI.toast('二级、三级会跟着一级自动调整，不能手动涂；已改为编辑' + (top ? '「' + top.name + '」' : '一级'));
+        if (!top) return;
+      }
+      if (T.cur === 'prov' && (T.provPick || (!T.activeProv && !T.opt.erase))) {
+        const S = App.S, c = App.Ops.cellAt(wx, wy), own = c >= 0 ? S.owner[c] : 0;
+        const id = own ? S.prov[c] : 0;
+        if (!id) { App.UI.toast('这里没有一级行政区（可在「国家」页自动划分）'); return; }
+        T.activeNation = own; T.activeProv = id; T.provPick = false;
+        App.UI.refresh(); App.UI.refreshTool(); App.UI.toast('已选中 ' + App.province(id).name); return;
+      }
       if ((T.cur === 'nation' || T.cur === 'prov' || T.cur === 'color') && T.opt.fill) { fill(wx, wy); App.UI.refresh(); return; }
       if (T.cur === 'war') { if (!T.activeNation) { App.UI.toast('请先在上方选择「进攻方」国家'); return; } if (T.opt.warMode !== 'brush') { App.War.annex(wx, wy); return; } App.War.startBrush(); }
       if (T.cur === 'nation' && !T.activeNation && !T.opt.erase) { App.UI.toast('请先在右侧「国家」面板选择或新建一个国家'); return; }
       if (T.cur === 'prov' && !T.activeProv && !T.opt.erase) { App.UI.toast('请先在右侧「行政区」面板选择或新建一个行政区'); return; }
       App.pushUndo(T.cur === "land" || T.cur === "color" ? ["terrain", "forest", "owner", "prov", "prov2", "prov3"] : T.cur === "terrain" ? ["terrain", "climate", "forest"] : T.cur === "forest" ? ["forest"] : ["owner", "prov", "prov2", "prov3"]);
       if (App.Refine) App.Refine.dismiss();
+      if (T.cur === 'prov' && App.War) T.provBefore = App.War.liveIds();
       T.startStroke(); T.strokeSnap = App.undoStack[App.undoStack.length - 1]; drag = { type: 'brush', wx, wy }; paint(wx, wy); return;
     }
     if (DRAWLINE.includes(T.cur)) {
