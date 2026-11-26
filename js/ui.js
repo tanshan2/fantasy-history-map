@@ -279,7 +279,8 @@
     act('adminSys', (b) => { const ns = App.ADMIN_SYS[b.value], has = S.provinces.some((p) => p.nation === an.id); if (has && !confirm('切换为「' + ns.name + '」？\n已有行政区会保留地名、改成新的级别名称' + (ns.levels < 3 ? '，并删除第三级' : '') + '。')) { UI.refresh(); return; } App.pushUndo(['prov', 'prov2', 'prov3']); App.Ops.setAdminSys(an, b.value); App.changed({ pol: true, ui: true }); UI.refreshTool(); });
     act('autoAll', () => { const redo = App.S.provinces.length && confirm('已有行政区的国家也重新划分吗？\n确定＝全部重新划分，取消＝只划分还没有行政区的'); App.pushUndo(['prov', 'prov2', 'prov3']); const k = App.Ops.autoAllProvinces(redo); App.changed({ pol: true, ui: true }); UI.toast('已划分 ' + k + ' 个国家'); });
     act("autoProv", () => { App.pushUndo(["prov", "prov2", "prov3"]); UI.histToast(App.Ops.autoProvinces(an.id, UI.provK || 0)); App.changed({ pol: true, ui: true }); });
-    act('histAdmin', (b) => { an.histAdmin = b.checked; App.autosave(); });
+    act('histAdmin', (b) => { an.histAdmin = b.checked; App.autosave(); UI.refresh(); });
+    if (an && UI.bindHistGo) UI.bindHistGo(p, an);
     act('autoCity', () => { App.pushUndo(); const k = App.Ops.autoCities(an.id).length; App.changed({ ui: true }); UI.toast(k ? '新增 ' + k + ' 座城市' : '可用土地有限，没有合适的新城址'); });
     act('autoArmy', () => { App.pushUndo(); const k = App.Polity.genArmies(an).length; App.changed({ ui: true }); UI.toast(k ? '生成 ' + k + ' 支部队' : '兵力已足够'); });
     act('delNation', () => { if (!confirm(`删除「${an.name}」？（可撤销）`)) return; App.pushUndo(["owner", "prov", "prov2", "prov3"]); App.Ops.deleteNation(an.id); T().activeNation = 0; App.changed({ pol: true, ui: true }); UI.refreshTool(); });
