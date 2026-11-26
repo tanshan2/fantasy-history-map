@@ -215,7 +215,7 @@
 
   // ---------- 接入：自动划分、全部重命名 ----------
   const O = App.Ops, origAuto = O.autoProvinces;
-  O.autoProvinces = (nid, ...a) => { const before = App.S.nextId; const res = origAuto(nid, ...a); PN.fitProvinces(nid, (p) => p.id >= before); return res; };
+  O.autoProvinces = (nid, ...a) => { const before = App.S.nextId; const res = origAuto(nid, ...a); PN.fitProvinces(nid, (p) => p.id >= before && !p.hist); return res; };
   O.renameAll = (nid, r = Math.random) => {
     const S = App.S, n = App.nation(nid); if (!n) return;
     const keep = n.name; n.name = ''; n.name = NM.nationFor(n, r) || keep;
