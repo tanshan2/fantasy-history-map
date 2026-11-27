@@ -306,7 +306,7 @@
       if (h) {
         if (!(T.sel && T.sel.kind === h.kind && T.sel.id === h.id)) T.select({ kind: h.kind, id: h.id });
         if (h.kind === 'nationLabel') T.highlight(h.id);
-        drag = { type: 'move', hit: h, wx, wy, pushed: false };
+        drag = { type: 'move', hit: h, wx, wy, pushed: false }; App.R.dragging = true;
       } else { T.select(null); drag = { type: 'pan', sx, sy, ox: App.R.view.ox, oy: App.R.view.oy, click: true, wx, wy }; }
       return;
     }
@@ -380,7 +380,7 @@
     pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null;
     canvas.style.cursor = '';
     if (!drag) return;
-    const d = drag; drag = null;
+    const d = drag; drag = null; if (App.R.dragging) { App.R.dragging = false; App.R.request(); }
     if (d.type === 'brush') T.endStroke();
     // 选择工具：在地图上轻点（没拖动）= 选中这块领土的国家并高亮
     if (d.type === 'pan' && d.click && T.cur === 'select') {
