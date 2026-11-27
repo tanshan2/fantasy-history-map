@@ -205,7 +205,8 @@
     const S = App.S, an = App.nation(T().activeNation);
     if (!an) return '<p class="muted">先在「国家」页选择一个国家。</p>' + `<ul class="list">${S.nations.map((n) => `<li data-nation="${n.id}"><i style="background:${n.color}"></i><span>${U.esc(n.name)}</span></li>`).join('')}</ul>`;
     const ps = S.provinces.filter((p) => p.nation === an.id);
-    const kids = (pid, lv) => ps.filter((p) => (p.level || 1) === lv && (lv === 1 || p.parent === pid));
+    const byParent = new Map(); ps.forEach((p) => { const k = (p.level || 1) === 1 ? 0 : p.parent; if (!byParent.has(k)) byParent.set(k, []); byParent.get(k).push(p); });
+    const kids = (pid, lv) => (byParent.get(lv === 1 ? 0 : pid) || []).filter((p) => (p.level || 1) === lv);
     const row = (p) => {
       const lv = p.level || 1, open = UI.provOpen?.[p.id];
       const sub = lv < 3 ? kids(p.id, lv + 1) : [];
@@ -213,7 +214,7 @@
     };
     let h = `<div class="row"><b style="color:${an.color}">■</b>&nbsp;${U.esc(an.name)} 的行政区</div>
       <div class="row wrap"><button class="btn pri" data-act="addProv">＋ 新建${App.levelName(an, 1)}</button></div><p class="muted">制度：${App.sysOf(an).name}（在「国家」页修改）</p><div></div>`;
-    const orphans = ps.filter((p) => (p.level || 1) > 1 && !ps.some((q) => q.id === p.parent));
+    const psIds = new Set(ps.map((p) => p.id)), orphans = ps.filter((p) => (p.level || 1) > 1 && !psIds.has(p.parent));
     h += '<ul class="list ptree">' + kids(0, 1).map(row).join('') + (orphans.length ? '<li class="muted" style="cursor:default">— 新占领 / 未编入上级 —</li>' + orphans.map(row).join('') : '') + '</ul>';
     if (!ps.length) h += '<p class="muted">新建省后，可在省下面建道、在道下面建府；选中后用左侧「行政区」工具在本国领土内涂抹。也可以回到「国家」页一键自动划分。</p>';
     const ap = App.province(T().activeProv);
@@ -495,12 +496,12 @@
     const esc = U.esc, ps = App.S.provinces.filter((p) => p.nation === n.id);
     let cur = App.province(T.activeProv);
     if (cur && (cur.level || 1) > 1) cur = App.Ops.ancestors(cur).find((q) => (q.level || 1) === 1) || cur;
-    const tops = ps.filter((p) => (p.level || 1) === 1 || !ps.some((q) => q.id === p.parent));
+    const idSet = new Set(ps.map((p) => p.id)), tops = ps.filter((p) => (p.level || 1) === 1 || !idSet.has(p.parent));
     let h = `<label>${esc(App.levelName(n, 1))}</label><select data-act="activeProv" title="共 ${tops.length} 个"><option value="0">— 在地图上点一下选取 —</option>${tops.map((p) => `<option value="${p.id}" ${cur && p.id === cur.id ? 'selected' : ''}>${esc(p.name)}${(p.level || 1) > 1 ? '（新占领）' : ''}</option>`).join('')}</select>`
       + `<input type="text" list="provSearchList" data-act="provSearch" placeholder="🔍 搜名字" size="7"><datalist id="provSearchList">${tops.map((p) => `<option value="${esc(p.name)}"></option>`).join('')}</datalist>`
       + `<button class="chip lock ${T.provPick ? 'on' : ''}" data-act="provPick" title="在地图上点一下直接选中那里的${esc(App.levelName(n, 1))}">🎯 从地图选</button>`;
     if (cur) {
-      const kids = ps.filter((p) => p.parent === cur.id), k3 = ps.filter((p) => kids.some((k) => k.id === p.parent)).length;
+      const kids = ps.filter((p) => p.parent === cur.id), kidIds = new Set(kids.map((k) => k.id)), k3 = ps.filter((p) => kidIds.has(p.parent)).length;
       h += `<span class="hint">「${esc(cur.name)}」含 ${kids.length} 个${esc(App.levelName(n, 2))}${App.maxLevel(n) > 2 ? '、' + k3 + ' 个' + esc(App.levelName(n, 3)) : ''}，会跟着它的范围自动调整</span><button class="btn small" data-act="provRedivide">重新划分其中的${esc(App.levelName(n, 2))}${App.maxLevel(n) > 2 ? '、' + esc(App.levelName(n, 3)) : ''}</button>`;
     } else h += '<span class="hint">在地图上点一个' + esc(App.levelName(n, 1)) + '就能直接选中并修改它的范围</span>';
     return h;
