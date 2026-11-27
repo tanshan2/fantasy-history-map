@@ -19,7 +19,8 @@
   };
   const ST = () => R.STYLES[App.S.meta.style] || R.STYLES.parchment;
   let REC = null; R.fontVer = 0;
-  if (document.fonts) document.fonts.addEventListener("loadingdone", () => { R.fontVer++; R.request(); });
+  // 中文网络字体按需分片下载：等一阵子没有新的字体片了再统一重画地名，避免一次停手重画好几遍
+  let fontT = 0; if (document.fonts) document.fonts.addEventListener("loadingdone", () => { clearTimeout(fontT); fontT = setTimeout(() => { R.fontVer++; R.request(); }, 300); });
   const cityHitBox = (ct, u) => { if (App.S.meta.cityStyle === "icon") { const sz = R.cityIconSize(ct, u); return { x: ct.x, y: ct.y - sz * 0.45, r: sz * 0.5 }; } return { x: ct.x, y: ct.y, r: u * 0.9 }; };
   const labelKey = (s) => {
     // 只做数字运算，不拼接字符串（避免每帧产生大量垃圾导致卡顿）
@@ -65,14 +66,20 @@
     G.update();
     G.buildGlow(S.meta.style, st.glow, st.glowD, st.glowA, st.glowP);
     const c = opt.ctx || ctx, view = opt.view || R.view, s = view.s, k = opt.scale || dpr, exp = !!opt.ctx;
+    // 分层：base＝底图（海、陆、山林、河、国家颜色、各级界线、海岸），top＝上层（城市、军队、地名、高亮、画笔等会动的东西）
+    const L = opt.layer, B = L !== 'top', TP = L !== 'base', live = !exp || L === 'top';
     const sw = (px) => (px * Math.pow(s, 0.5)) / s;
     c.setTransform(1, 0, 0, 1, 0, 0);
-    if (!exp) { c.fillStyle = '#151b26'; c.fillRect(0, 0, c.canvas.width, c.canvas.height); }
+    if (!exp && B) { c.fillStyle = '#151b26'; c.fillRect(0, 0, c.canvas.width, c.canvas.height); }
     c.setTransform(k * s, 0, 0, k * s, k * view.ox, k * view.oy);
     const vx0 = -view.ox / s, vy0 = -view.oy / s, vx1 = vx0 + c.canvas.width / k / s, vy1 = vy0 + c.canvas.height / k / s;
     const inView = (x, y, m = 40) => x > vx0 - m && x < vx1 + m && y > vy0 - m && y < vy1 + m;
     c.save();
     c.beginPath(); c.rect(0, 0, WW, HH); c.clip();
+    if (S.meta.vec && G.vecKey !== S.meta.vec && App.Templates) App.Templates.ensureVec(S.meta.vec);
+    const vec = S.meta.vec && G.vecKey === S.meta.vec ? G.vecCoast : null;
+    const coast = vec || G.coastPath;
+    if (B) {
     if (!pats.sea || exp) pats = { sea: c.createPattern(App.Sprites.sea, 'repeat'), paper: c.createPattern(App.Sprites.paper, 'repeat') };
     // 海洋
     c.fillStyle = S.meta.ocean || st.ocean; c.fillRect(0, 0, WW, HH);
@@ -89,10 +96,7 @@
     c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
     c.drawImage(G.glowCanvas, 0, 0, WW, HH);
     // 陆地
-    // 有高精度矢量海岸（真实地理模板）时用它，否则用格子推算的海岸
-    if (S.meta.vec && G.vecKey !== S.meta.vec && App.Templates) App.Templates.ensureVec(S.meta.vec);
-    const vec = S.meta.vec && G.vecKey === S.meta.vec ? G.vecCoast : null;
-    const coast = vec || G.coastPath;
+    // 有高精度矢量海岸（真实地理模板）时用它，否则用格子推算的海岸（vec / coast 已在上面算好）
     c.save(); c.clip(coast, 'evenodd');
     c.fillStyle = '#f1e9d6'; c.fillRect(0, 0, WW, HH);
     // 地图模式：政区（不画山、林、河）/ 地形（不画国家填色和行政区）/ 综合
@@ -137,21 +141,26 @@
     S.nations.forEach((n) => { const p = G.nationPaths.get(n.id); if (!p) return; c.strokeStyle = POL ? U.shade(n.color, st.borderShade - 0.08) : 'rgba(90,30,20,.6)'; c.lineWidth = sw(POL ? st.borderW * 1.35 : 1.3); c.stroke(p); });
     c.setLineDash([]);
     c.restore();
-    if (!exp && App.Tools && App.Tools.wetOn) { App.Tools.flushWet(); c.save(); c.imageSmoothingEnabled = false; c.globalAlpha = Math.min(0.85, st.nationA + 0.05); c.drawImage(App.Tools.wet, 0, 0, WW, HH); c.restore(); c.imageSmoothingEnabled = true; }
     // 海岸线
     if (vec && G.lakePath) { c.fillStyle = S.meta.ocean || st.ocean; c.fill(G.lakePath, "evenodd"); c.globalAlpha = st.seaAlpha; c.fillStyle = pats.sea; c.fill(G.lakePath, "evenodd"); c.globalAlpha = 1; c.strokeStyle = st.coast; c.lineWidth = sw(st.coastW * 0.8); c.stroke(G.lakePath); }
     c.strokeStyle = st.coast; c.lineWidth = sw(st.coastW); c.lineJoin = 'round'; c.stroke(coast);
-    c.lineCap = 'round'; c.lineJoin = 'round';
-    S.lines.forEach((l) => drawLine(c, l, sw));
-    if (S.meta.showArmies) S.arrows.forEach((a) => drawArrow(c, a, sw));
-    S.markers.forEach((m) => drawMarker(c, m, s, sw));
     if (st.aged) {
       const ag = c.createRadialGradient(WW / 2, HH / 2, HH * 0.35, WW / 2, HH / 2, WW * 0.62);
       ag.addColorStop(0, 'rgba(255,255,255,0)'); ag.addColorStop(1, 'rgba(120,85,40,0.55)');
       c.globalCompositeOperation = 'multiply'; c.fillStyle = ag; c.fillRect(0, 0, WW, HH);
       c.fillStyle = pats.paper; c.globalAlpha = 0.35; c.fillRect(0, 0, WW, HH); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
     }
-    if (!exp && App.Tools && App.Tools.hl) drawHighlight(c, App.Tools.hl, s, sw, coast, vec);
+    } // ---- 底图结束 ----
+    if (!TP) { c.restore(); return; }
+    // ---- 上层：labels＝地名、城市名、文字（单独缓存）；top＝城市、军队、线条、高亮、画笔等会动的东西 ----
+    const LB = L !== 'top', LV = L !== 'labels';
+    if (LV) {
+    if (live && App.Tools && App.Tools.wetOn) { App.Tools.flushWet(); c.save(); if (vec) c.clip(coast, 'evenodd'); c.imageSmoothingEnabled = false; c.globalAlpha = Math.min(0.85, st.nationA + 0.05); c.drawImage(App.Tools.wet, 0, 0, WW, HH); c.restore(); c.imageSmoothingEnabled = true; }
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    S.lines.forEach((l) => drawLine(c, l, sw));
+    if (S.meta.showArmies) S.arrows.forEach((a) => drawArrow(c, a, sw));
+    S.markers.forEach((m) => drawMarker(c, m, s, sw));
+    if (live && App.Tools && App.Tools.hl) drawHighlight(c, App.Tools.hl, s, sw, coast, vec);
     // 多选的国家：提亮 + 金色虚线描边
     if (!exp && App.Tools && App.Tools.multi && App.Tools.multi.size) {
       c.save(); if (vec) c.clip(coast, 'evenodd');
@@ -160,12 +169,16 @@
       App.Tools.multi.forEach((id) => { const p = G.nationPaths.get(id); if (!p) return; c.strokeStyle = 'rgba(40,24,8,.7)'; c.lineWidth = sw(4); c.stroke(p); c.strokeStyle = '#ffd76e'; c.lineWidth = sw(2.2); c.stroke(p); });
       c.setLineDash([]); c.restore();
     }
+    } // LV
     // 城市
     const u = 6 * Math.pow(s, 0.5) / s;
+    if (LV) {
     R.cityBoxes = [];
     const cities = S.cities.filter((ct) => inView(ct.x, ct.y)).sort((a, b) => a.y - b.y);
     cities.forEach((ct) => drawCity(c, ct, u, s, st));
     if (S.meta.showArmies) S.armies.forEach((a) => { if (inView(a.x, a.y)) drawArmy(c, a, u); });
+    }
+    if (LB) {
     // 标签
     // 标签：排布结果缓存（内容和缩放级别不变时直接重用，拖动地图不再重算）
     const lk = labelKey(s);
@@ -179,7 +192,7 @@
       const cl = S.meta.showCityLabels ? R.layoutCityLabels(c, allC, u, s) : { list: [], boxes: [] };
       const soft = cl.boxes.concat(allC.map((ct) => cityHitBox(ct, u)).map((b) => [b.x - b.r, b.y - b.r, b.x + b.r, b.y + b.r]));
       if (S.meta.showArmies) S.armies.forEach((a) => soft.push([a.x - u * 2.2, a.y - u * 2.6, a.x + u * 2.2, a.y + u * 2.6]));
-      const rec = []; REC = rec; drawRegionLabels(c, s, st, soft); REC = null;
+      const rec = []; REC = rec; R._vb = [vx0, vy0, vx1, vy1]; drawRegionLabels(c, s, st, soft); REC = null; R._vb = null;
       LC = { key: lk, rec, boxes: R.labelBoxes.slice(), cities: cl.list };
       if (!opt.ctx) R._lc = LC;
     }
@@ -195,12 +208,14 @@
       c.fillStyle = "#1e1e1e"; c.textAlign = "left"; c.textBaseline = "middle"; c.fillText(f.name, x + sz * 0.3, y + sz * 0.72);
     });
     S.texts.forEach((t) => drawText(c, t));
+    } // LB
     const ref = S.meta.ref;
-    if (ref && ref.visible && ref.src) {
+    if (LV && ref && ref.visible && ref.src) {
       if (R.refSrc !== ref.src) { R.refImg = new Image(); R.refImg.onload = R.request; R.refImg.src = ref.src; R.refSrc = ref.src; }
       if (R.refImg.complete && R.refImg.naturalWidth) { c.globalAlpha = ref.opacity; c.drawImage(R.refImg, ref.x, ref.y, ref.w, ref.h); c.globalAlpha = 1; }
     }
     c.restore();
+    if (!LV) return;
     c.strokeStyle = '#0d1420'; c.lineWidth = 3 / s; c.strokeRect(0, 0, WW, HH);
     c.strokeStyle = 'rgba(214,196,150,.8)'; c.lineWidth = 1 / s; c.strokeRect(-4 / s, -4 / s, WW + 8 / s, HH + 8 / s);
     if (!exp && App.Tools) App.Tools.drawOverlay(c, s);
@@ -254,24 +269,88 @@
       c.beginPath(); c.moveTo(pts[i - 1][0], pts[i - 1][1]); c.lineTo(pts[i][0], pts[i][1]); c.stroke();
     }
   };
-  // ---- 缩放时先把上一帧缩放显示（瞬间响应），停手约 0.15 秒后再完整重画 ----
-  // 浏览器在平移时能复用已画好的边界，缩放时却要把上万条行政区界全部重新描一遍，这里先用画面缩放顶上
+  // ---- 分层合成（和网上地图一样）----
+  // base：底图（海、陆、山林、河、国家颜色、各级界线）；labels：地名、城市名、文字；top：城市、军队、线条、高亮、画笔等会动的东西。
+  // base 和 labels 按固定的缩放档位（每档约 19%）画好存起来，只往小缩（保持清晰）：同一档内缩放、平移、拖动、画笔都不用重画，
+  // 跨档并停手后才重画一次。world 是整张地图的低清底图，平移、缩小时补边，不会露黑。
   {
-    const full = R.draw, frame = document.createElement('canvas'); let fv = null, prevS = 0, zoomT = 0, tmr = 0;
+    const full = R.draw, newCv = () => document.createElement('canvas');
+    const qs = (s) => Math.pow(2, Math.ceil(Math.log2(s) * 4 - 1e-6) / 4); // 缩放档位（向上取）
+    let sc = null; // 底图＋地名按当前缩放合成好的一张，平移时 1:1 贴图，不用每帧缩放
+    let base = null, world = null, lab = null, prevView = '', prevS = 0, lastMove = 0, lastZoom = 0, tmr = 0, wTmr = 0;
+    R.baseVer = 0; // 改了陆地、地貌、国家、行政区等底图内容时 +1
+    const sig = () => {
+      const S = App.S, m = S.meta, G = App.Geo; let rv = 0;
+      S.rivers.forEach((r) => (r.pts || []).forEach((p) => (rv = (rv * 31 + Math.round(p[0] * 7 + p[1] * 13)) % 1e9)));
+      return [R.baseVer, G.polVer, m.style, m.ocean, m.lv1, m.lv2, m.lv3, m.showIcons, m.showGrid, m.showVassal, m.showClimate, m.mapView, R.mode(), m.vec, G.vecKey, rv,
+        S.nations.map((n) => n.color + ':' + (n.overlord || 0)).join(',')].join('|');
+    };
+    // 底图覆盖：当前视野四周再多 8%，按档位 bs 画
+    const renderBase = (v, key) => {
+      const cssW = canvas.width / dpr, cssH = canvas.height / dpr, mx = cssW * 0.2, my = cssH * 0.2, bs = qs(v.s);
+      const wx0 = (-v.ox - mx) / v.s, wy0 = (-v.oy - my) / v.s, ww = (cssW + 2 * mx) / v.s, wh = (cssH + 2 * my) / v.s;
+      const W1 = Math.ceil(ww * bs * dpr), H1 = Math.ceil(wh * bs * dpr);
+      const cv = base && base.cv.width === W1 && base.cv.height === H1 ? base.cv : newCv(); cv.width = W1; cv.height = H1;
+      const bv = { s: bs, ox: -wx0 * bs, oy: -wy0 * bs };
+      full({ ctx: cv.getContext('2d'), view: bv, scale: dpr, layer: 'base' });
+      base = { cv, s: bs, ox: bv.ox, oy: bv.oy, cssW: ww * bs, cssH: wh * bs, key, cw: canvas.width, ch: canvas.height };
+    };
+    const renderLabels = (key) => {
+      const cv = lab && lab.cv.width === base.cv.width && lab.cv.height === base.cv.height ? lab.cv : newCv(); cv.width = base.cv.width; cv.height = base.cv.height;
+      full({ ctx: cv.getContext('2d'), view: { s: base.s, ox: base.ox, oy: base.oy }, scale: dpr, layer: 'labels' });
+      lab = { cv, s: base.s, ox: base.ox, oy: base.oy, key };
+    };
+    const renderWorld = (key) => {
+      const so = Math.min(2048 / WW, 1.2) / dpr, cv = world ? world.cv : newCv();
+      cv.width = Math.round(WW * so * dpr); cv.height = Math.round(HH * so * dpr);
+      full({ ctx: cv.getContext('2d'), view: { s: so, ox: 0, oy: 0 }, scale: dpr, layer: 'base' });
+      world = { cv, so, key };
+    };
+    // 记录每次重画了什么、用了多久（调试用：App.R.log）
+    R.log = []; const timed = (name, fn) => (...a) => { const t = performance.now(); const r = fn(...a); R.log.push(name + ':' + Math.round(performance.now() - t)); if (R.log.length > 40) R.log.shift(); return r; };
+    const blit = (L, v) => { const kz = v.s / L.s; ctx.drawImage(L.cv, Math.round((v.ox - L.ox * kz) * dpr), Math.round((v.oy - L.oy * kz) * dpr), L.cv.width * kz, L.cv.height * kz); };
+    const renderBaseT = timed('base', renderBase), renderLabelsT = timed('labels', renderLabels), renderWorldT = timed('world', renderWorld);
     R.draw = (opt = {}) => {
       if (opt.ctx || !canvas) return full(opt);
-      const v = R.view, now = performance.now();
-      if (v.s !== prevS) { prevS = v.s; zoomT = now; }
-      if (fv && v.s !== fv.s && now - zoomT < 140 && frame.width === canvas.width && frame.height === canvas.height) {
-        const kz = v.s / fv.s;
-        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#151b26'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(frame, (v.ox - fv.ox * kz) * dpr, (v.oy - fv.oy * kz) * dpr, frame.width * kz, frame.height * kz);
-        clearTimeout(tmr); tmr = setTimeout(() => { zoomT = 0; R.request(); }, 150);
-        return;
+      App.Geo.update();
+      const v = R.view, now = performance.now(), key = sig();
+      const vk = v.s + ',' + v.ox + ',' + v.oy; if (vk !== prevView) { prevView = vk; lastMove = now; }
+      if (v.s !== prevS) { prevS = v.s; lastZoom = now; }
+      const moving = now - lastMove < 120, zooming = now - lastZoom < 150;
+      const cssW = canvas.width / dpr, cssH = canvas.height / dpr;
+      const covers = (L) => { const kz = v.s / L.s, x0 = v.ox - L.ox * kz, y0 = v.oy - L.oy * kz; return x0 <= 0.5 && y0 <= 0.5 && x0 + L.cssW * kz >= cssW - 0.5 && y0 + L.cssH * kz >= cssH - 0.5; };
+      const fresh = base && base.key === key && base.cw === canvas.width && base.ch === canvas.height;
+      const good = fresh && base.s === qs(v.s) && covers(base);
+      let rebased = false;
+      if (!fresh || (!good && !moving)) { renderBaseT(v, key); rebased = true; }  // 数据变了马上重画；跨档、越界等停手再画
+      else if (!good) { clearTimeout(tmr); tmr = setTimeout(R.request, 130); }
+      // 地名层跟着底图的几何；内容变了（改名、移动城市等）在不拖动、不缩放时重画
+      const lk = labelKey(base.s).join('|');
+      const aligned = lab && lab.s === base.s && lab.ox === base.ox && lab.oy === base.oy;
+      if (!lab || ((!aligned || lab.key !== lk) && !R.dragging && !moving && !(rebased && lab))) renderLabelsT(lk);
+      else if (rebased && lab) setTimeout(R.request, 0);            // 这一帧刚重画了底图：地名留到下一帧再画，把卡顿拆成两段
+      else if (!aligned || lab.key !== lk) { clearTimeout(tmr); tmr = setTimeout(R.request, 130); }
+      const labOk = lab.s === base.s && lab.ox === base.ox && lab.oy === base.oy;
+      // 合成
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#151b26'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      if (world && world.key === key && !covers(base)) { const z = v.s / world.so; ctx.drawImage(world.cv, v.ox * dpr, v.oy * dpr, world.cv.width * z, world.cv.height * z); }
+      if (zooming || !labOk) { ctx.imageSmoothingQuality = zooming ? 'low' : 'medium'; blit(base, v); blit(lab, v); }
+      else {
+        if (!sc || sc.s !== v.s || sc.base !== base || sc.lab !== lab || sc.bcv !== base.cv.width + 'x' + base.cv.height) {
+          const t0 = performance.now(), kz = v.s / base.s, cvs = sc && sc.cv || newCv(); cvs.width = Math.ceil(base.cv.width * kz); cvs.height = Math.ceil(base.cv.height * kz);
+          const g = cvs.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+          g.drawImage(base.cv, 0, 0, cvs.width, cvs.height); g.drawImage(lab.cv, 0, 0, cvs.width, cvs.height);
+          sc = { cv: cvs, s: v.s, ox: base.ox * kz, oy: base.oy * kz, base, lab, bcv: base.cv.width + 'x' + base.cv.height }; R.log.push('sc:' + Math.round(performance.now() - t0));
+        }
+        ctx.drawImage(sc.cv, Math.round((v.ox - sc.ox) * dpr), Math.round((v.oy - sc.oy) * dpr));
       }
-      full(opt);
-      if (frame.width !== canvas.width || frame.height !== canvas.height) { frame.width = canvas.width; frame.height = canvas.height; }
-      const fc = frame.getContext('2d'); fc.setTransform(1, 0, 0, 1, 0, 0); fc.clearRect(0, 0, frame.width, frame.height); fc.drawImage(canvas, 0, 0); fv = { ...v };
+      R.zooming = zooming; // 正在缩放：军队、标记上的小字先不画（文字每换一次大小都要重新描字形），停手后马上画回来
+      full({ layer: 'top' });
+      R.zooming = false;
+      if (zooming) { clearTimeout(R._zT); R._zT = setTimeout(R.request, 170); }
+      // 整图低清底图：数据变了以后空闲时补画（给平移、缩小时补边用）
+      if (!world || world.key !== key) { clearTimeout(wTmr); wTmr = setTimeout(() => { if (performance.now() - lastMove < 300) { wTmr = setTimeout(R.request, 300); return; } renderWorldT(sig()); }, 500); }
     };
   }
   R.drawRiver = drawRiver;
@@ -341,7 +420,7 @@
       c.strokeStyle = '#3b2a1d'; c.lineWidth = u * 0.25; c.beginPath(); c.moveTo(-u * 0.8, u * 0.8); c.lineTo(u * 0.6, -u * 0.6); c.stroke();
       c.beginPath(); c.arc(u * 0.6, -u * 0.6, u * 0.7, Math.PI * 0.6, Math.PI * 1.9); c.stroke();
     }
-    if (m.name) {
+    if (m.name && !R.zooming) {
       c.font = fontFor(m.name, u * 1.3, 700); c.textAlign = 'center'; c.textBaseline = 'top';
       c.lineWidth = u * 0.35; c.strokeStyle = 'rgba(245,235,210,.85)'; c.strokeText(m.name, 0, u * 1.2); c.fillStyle = '#6b1a12'; c.fillText(m.name, 0, u * 1.2);
     }
@@ -425,7 +504,7 @@
       default: X();
     }
     const fz = u * 1.1;
-    const tx = (txt, y, base) => { c.font = fontFor(txt, fz, 800); c.textAlign = 'center'; c.textBaseline = base; c.lineWidth = fz * 0.3; c.strokeStyle = 'rgba(255,255,255,.9)'; c.strokeText(txt, 0, y); c.fillStyle = '#222'; c.fillText(txt, 0, y); };
+    const tx = (txt, y, base) => { if (R.zooming) return; c.font = fontFor(txt, fz, 800); c.textAlign = 'center'; c.textBaseline = base; c.lineWidth = fz * 0.3; c.strokeStyle = 'rgba(255,255,255,.9)'; c.strokeText(txt, 0, y); c.fillStyle = '#222'; c.fillText(txt, 0, y); };
     if (a.strength) tx(a.strength, y0 - u * 0.15, 'bottom');
     if (a.name) tx(a.name, -y0 + u * 0.2, 'top');
     c.restore();
@@ -523,7 +602,7 @@
     const PSZ = { 1: [30, 0.62, 34, 8], 2: [20, 0.48, 24, 7], 3: [13, 0.36, 17, 6.5] };
     [1, 2, 3].forEach((lv) => {
       if (!S.meta['lv' + lv]) return;
-      S.provinces.filter((p) => (p.level || 1) === lv && p.name).map((p) => [p, G.provLabels.get(p.id)]).filter(([, i]) => i && Math.sqrt(i.n) * App.CELL * s >= PSZ[lv][3] * 2.2).sort((a, b) => b[1].n - a[1].n).forEach(([p, info]) => {
+      S.provinces.filter((p) => (p.level || 1) === lv && p.name).map((p) => [p, G.provLabels.get(p.id)]).filter(([, i]) => { if (!i) return false; const rr = Math.sqrt(i.n) * App.CELL; if (rr * s < PSZ[lv][3] * 2.2) return false; const vb = R._vb; return !vb || (i.x > vb[0] - rr && i.x < vb[2] + rr && i.y > vb[1] - rr && i.y < vb[3] + rr); }).sort((a, b) => b[1].n - a[1].n).forEach(([p, info]) => {
         const n = App.nation(p.nation); if (!n) return;
         place({ name: p.name, info, kind: 'prov', id: p.id, weight: lv === 1 ? 700 : 500, fill: lv === 1 ? 'rgba(70,24,12,.88)' : st.provLabel || U.rgba(U.shade(n.color, -0.7), 0.72), halo: lv === 1 ? 'rgba(245,232,205,.6)' : null, maxW: PSZ[lv][0], k: PSZ[lv][1], maxScr: PSZ[lv][2], minScr: PSZ[lv][3], arr: App.provArr(lv) });
       });
