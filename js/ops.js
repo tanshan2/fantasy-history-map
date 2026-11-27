@@ -6,7 +6,7 @@
   App.afterBigChange = () => {
     if (App.Tools && App.Tools.hl && !App.nation(App.Tools.hl)) App.Tools.hl = 0;
     if (App.Tools && App.Tools.sel && !App.Tools.selObj()) App.Tools.sel = null;
-    App.Geo.dirtyLand = App.Geo.dirtyPol = true;
+    App.Geo.dirtyLand = App.Geo.dirtyPol = true; App.R.baseVer = (App.R.baseVer || 0) + 1;
     if (App.UI) App.UI.refresh();
     App.R.request(); App.autosave();
   };
@@ -15,6 +15,7 @@
     if (what.land) App.Geo.dirtyLand = true;
     if (what.tint) App.Geo.dirtyTint = true;
     if (what.pol) App.Geo.dirtyPol = true;
+    if (what.land || what.tint || what.pol) App.R.baseVer = (App.R.baseVer || 0) + 1; // 底图缓存失效
     if (what.ui && App.UI) App.UI.refresh();
     App.R.request(); App.autosave();
   };
