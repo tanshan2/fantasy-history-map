@@ -170,7 +170,10 @@
     // 标签：排布结果缓存（内容和缩放级别不变时直接重用，拖动地图不再重算）
     const lk = labelKey(s);
     let LC = opt.ctx ? null : R._lc;
-    if (!LC || LC.key.length !== lk.length || LC.key.some((v, i) => v !== lk[i])) {
+    const nowT = performance.now(); if (!opt.ctx && R._lastS !== s) { R._lastS = s; R._zoomT = nowT; }
+    const zoomingOnly = !opt.ctx && LC && LC.key.length === lk.length && LC.key.every((v, i) => i === 1 || v === lk[i]) && LC.key[1] !== lk[1] && nowT - (R._zoomT || 0) < 180;
+    if (zoomingOnly) { clearTimeout(R._relabelT); R._relabelT = setTimeout(() => R.request(), 200); }
+    if (!zoomingOnly && (!LC || LC.key.length !== lk.length || LC.key.some((v, i) => v !== lk[i]))) {
       const allC = S.cities.slice().sort((a, b) => a.y - b.y);
       R.labelBoxes = [];
       const cl = S.meta.showCityLabels ? R.layoutCityLabels(c, allC, u, s) : { list: [], boxes: [] };
@@ -251,6 +254,26 @@
       c.beginPath(); c.moveTo(pts[i - 1][0], pts[i - 1][1]); c.lineTo(pts[i][0], pts[i][1]); c.stroke();
     }
   };
+  // ---- 缩放时先把上一帧缩放显示（瞬间响应），停手约 0.15 秒后再完整重画 ----
+  // 浏览器在平移时能复用已画好的边界，缩放时却要把上万条行政区界全部重新描一遍，这里先用画面缩放顶上
+  {
+    const full = R.draw, frame = document.createElement('canvas'); let fv = null, prevS = 0, zoomT = 0, tmr = 0;
+    R.draw = (opt = {}) => {
+      if (opt.ctx || !canvas) return full(opt);
+      const v = R.view, now = performance.now();
+      if (v.s !== prevS) { prevS = v.s; zoomT = now; }
+      if (fv && v.s !== fv.s && now - zoomT < 140 && frame.width === canvas.width && frame.height === canvas.height) {
+        const kz = v.s / fv.s;
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#151b26'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(frame, (v.ox - fv.ox * kz) * dpr, (v.oy - fv.oy * kz) * dpr, frame.width * kz, frame.height * kz);
+        clearTimeout(tmr); tmr = setTimeout(() => { zoomT = 0; R.request(); }, 150);
+        return;
+      }
+      full(opt);
+      if (frame.width !== canvas.width || frame.height !== canvas.height) { frame.width = canvas.width; frame.height = canvas.height; }
+      const fc = frame.getContext('2d'); fc.setTransform(1, 0, 0, 1, 0, 0); fc.clearRect(0, 0, frame.width, frame.height); fc.drawImage(canvas, 0, 0); fv = { ...v };
+    };
+  }
   R.drawRiver = drawRiver;
 
   // ---- 线条 ----
@@ -500,7 +523,7 @@
     const PSZ = { 1: [30, 0.62, 34, 8], 2: [20, 0.48, 24, 7], 3: [13, 0.36, 17, 6.5] };
     [1, 2, 3].forEach((lv) => {
       if (!S.meta['lv' + lv]) return;
-      S.provinces.filter((p) => (p.level || 1) === lv && p.name).map((p) => [p, G.provLabels.get(p.id)]).filter(([, i]) => i).sort((a, b) => b[1].n - a[1].n).forEach(([p, info]) => {
+      S.provinces.filter((p) => (p.level || 1) === lv && p.name).map((p) => [p, G.provLabels.get(p.id)]).filter(([, i]) => i && Math.sqrt(i.n) * App.CELL * s >= PSZ[lv][3] * 2.2).sort((a, b) => b[1].n - a[1].n).forEach(([p, info]) => {
         const n = App.nation(p.nation); if (!n) return;
         place({ name: p.name, info, kind: 'prov', id: p.id, weight: lv === 1 ? 700 : 500, fill: lv === 1 ? 'rgba(70,24,12,.88)' : st.provLabel || U.rgba(U.shade(n.color, -0.7), 0.72), halo: lv === 1 ? 'rgba(245,232,205,.6)' : null, maxW: PSZ[lv][0], k: PSZ[lv][1], maxScr: PSZ[lv][2], minScr: PSZ[lv][3], arr: App.provArr(lv) });
       });
